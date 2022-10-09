@@ -21,56 +21,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
     log::info!("Starting throw dice bot...");
 
+    let client = reqwest::Client::new();
     let bot = Bot::from_env();
 
-    teloxide::repl(bot, |bot: Bot, msg: Message| async move {
-        let client = reqwest::Client::new();
-        let url = std::env::var("COG_URL").expect("COG_URL must be set");
+    teloxide::repl(bot, move |bot: Bot, msg: Message| {
+        let client = client.clone();
 
-        bot.send_message(msg.chat.id, msg.text().unwrap_or("what!?"))
-            .await?;
+        async move {
+            let url = std::env::var("COG_URL").expect("COG_URL must be set");
 
-        log::info!(
-            "Echoed message from {} in {}: {}",
-            msg.chat.id,
-            msg.chat.username().unwrap_or("unknown"),
-            msg.text().unwrap_or("what!?")
-        );
+            log::info!(
+                "User {} requested {}",
+                msg.chat.username().unwrap_or("unknown"),
+                msg.text().unwrap_or("what!?")
+            );
 
-        let params = format!(
-            "{{\"input\": {{ \"prompt\" : \"{}\" }} }}",
-            msg.text().unwrap_or("what!?")
-        );
+            let params = format!(
+                "{{\"input\": {{ \"prompt\" : \"{}\" }} }}",
+                msg.text().unwrap_or("what!?")
+            );
 
-        debug!("{:?}", unescape(&params));
+            debug!("{:?}", unescape(&params));
 
-        let response = client
-            .post(url)
-            .header(CONTENT_TYPE, "application/json")
-            .body(unescape(&params).unwrap())
-            .send()
-            .await?;
+            let response = client
+                .post(url)
+                .header(CONTENT_TYPE, "application/json")
+                .body(unescape(&params).unwrap())
+                .send()
+                .await?;
 
-        debug!("{:#?}", response);
+            debug!("{:#?}", response);
 
-        match response.status() {
-            reqwest::StatusCode::OK => {
-                let json_response: JSONResponse = response.json().await?;
-                debug!("{:#?}", json_response);
+            match response.status() {
+                reqwest::StatusCode::OK => {
+                    let json_response: JSONResponse = response.json().await?;
+                    debug!("{:#?}", json_response);
 
-                let img_url = reqwest::Url::parse(&json_response.output[0]).unwrap();
+                    let img = json_response.output[0].split(",").collect::<Vec<&str>>()[1];
 
-                let img_url = InputFile::url(img_url);
+                    let img = base64::decode(img).unwrap();
 
-                bot.send_photo(msg.chat.id, img_url).await?;
+                    let img = InputFile::memory(img);
+
+                    bot.send_photo(msg.chat.id, img)
+                        .caption(msg.text().unwrap_or("unknown prompt"))
+                        .await?;
+                }
+                _ => {
+                    bot.send_message(msg.chat.id, "Something went wrong")
+                        .await?;
+                }
             }
-            _ => {
-                bot.send_message(msg.chat.id, "Something went wrong")
-                    .await?;
-            }
+
+            Ok(())
         }
-
-        Ok(())
     })
     .await;
 
