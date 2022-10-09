@@ -6,16 +6,11 @@ use log::debug;
 use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 
-use teloxide::{prelude::*, types::InputFile};
+use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands};
+
 use tokio::main as async_main;
 
 use unescape::unescape;
-
-#[derive(Serialize, Deserialize, Debug)]
-struct JSONResponse {
-    status: String,
-    output: Vec<String>,
-}
 
 #[async_main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,24 +22,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
     log::info!("Starting throw dice bot...");
 
-    let client = Arc::new(reqwest::Client::new());
     let bot = Bot::from_env();
 
-    teloxide::repl(bot, move |bot: Bot, msg: Message| {
-        let client = Arc::clone(&client);
-        async move {
+    teloxide::commands_repl(bot, answer, Command::ty()).await;
+
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct JSONResponse {
+    status: String,
+    output: Vec<String>,
+}
+
+#[derive(BotCommands, Clone)]
+#[command(
+    rename_rule = "lowercase",
+    description = "These commands are supported:"
+)]
+enum Command {
+    #[command(description = "Create an image using Stable Diffusion v1.4")]
+    Make(String),
+}
+
+async fn answer(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
+    let client = Arc::new(reqwest::Client::new());
+
+    match cmd {
+        Command::Make(prompt) => {
+            let client = Arc::clone(&client);
+
             let url = std::env::var("COG_URL").expect("COG_URL must be set");
 
             log::info!(
                 "User {} requested {}",
                 msg.chat.username().unwrap_or("unknown"),
-                msg.text().unwrap_or("what!?")
+                prompt
             );
 
-            let params = format!(
-                "{{\"input\": {{ \"prompt\" : \"{}\" }} }}",
-                msg.text().unwrap_or("what!?")
-            );
+            let params = format!("{{\"input\": {{ \"prompt\" : \"{}\" }} }}", prompt);
 
             debug!("{:?}", unescape(&params));
 
@@ -68,20 +84,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let img = InputFile::memory(img);
 
-                    bot.send_photo(msg.chat.id, img)
-                        .caption(msg.text().unwrap_or("unknown prompt"))
-                        .await?;
+                    bot.send_photo(msg.chat.id, img).caption(prompt).await?;
                 }
                 _ => {
                     bot.send_message(msg.chat.id, "Something went wrong")
                         .await?;
                 }
             }
-
-            Ok(())
         }
-    })
-    .await;
+    };
 
     Ok(())
 }
