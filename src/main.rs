@@ -4,7 +4,7 @@ use log::debug;
 use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 
-use teloxide::prelude::*;
+use teloxide::{prelude::*, types::InputFile};
 use tokio::main as async_main;
 
 use unescape::unescape;
@@ -53,9 +53,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         debug!("{:#?}", response);
 
-        let body = response.json::<JSONResponse>().await?;
+        match response.status() {
+            reqwest::StatusCode::OK => {
+                let json_response: JSONResponse = response.json().await?;
+                debug!("{:#?}", json_response);
 
-        debug!("{:#?}", body);
+                let img_url = reqwest::Url::parse(&json_response.output[0]).unwrap();
+
+                let img_url = InputFile::url(img_url);
+
+                bot.send_photo(msg.chat.id, img_url).await?;
+            }
+            _ => {
+                bot.send_message(msg.chat.id, "Something went wrong")
+                    .await?;
+            }
+        }
 
         Ok(())
     })
