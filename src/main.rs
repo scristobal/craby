@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use dotenv::dotenv;
 
 use log::debug;
@@ -17,16 +19,19 @@ struct JSONResponse {
 
 #[async_main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv().ok();
+    match dotenv() {
+        Ok(_) => debug!("Loaded .env file"),
+        Err(_) => debug!("No .env file found. Falling back to environment variables"),
+    }
+
     pretty_env_logger::init();
     log::info!("Starting throw dice bot...");
 
-    let client = reqwest::Client::new();
+    let client = Arc::new(reqwest::Client::new());
     let bot = Bot::from_env();
 
     teloxide::repl(bot, move |bot: Bot, msg: Message| {
-        let client = client.clone();
-
+        let client = Arc::clone(&client);
         async move {
             let url = std::env::var("COG_URL").expect("COG_URL must be set");
 
