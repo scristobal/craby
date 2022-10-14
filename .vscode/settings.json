@@ -1,3 +1,25 @@
 {
-    "cSpell.words": ["dotenv", "reqwest", "teloxide"]
+    "cSpell.words": ["Craby", "dotenv", "reqwest", "teloxide"],
+    "workbench.colorTheme": "paddy-dark-upright",
+    "workbench.colorCustomizations": {
+        "commandCenter.border": "#e7e7e799",
+        "sash.hoverBorder": "#7f3319",
+        "titleBar.activeBackground": "#aa4422",
+        "titleBar.activeForeground": "#e7e7e7",
+        "titleBar.inactiveBackground": "#aa442299",
+        "titleBar.inactiveForeground": "#e7e7e799",
+        "statusBar.background": "#aa4422",
+        "statusBar.foreground": "#e7e7e7",
+        "statusBarItem.hoverBackground": "#d4552b",
+        "statusBarItem.remoteBackground": "#aa4422",
+        "statusBarItem.remoteForeground": "#e7e7e7",
+        "tab.activeBorder": "#7f3319",
+        "activityBar.activeBackground": "#7f3319",
+        "activityBar.background": "#7f3319",
+        "activityBar.foreground": "#e7e7e7",
+        "activityBar.inactiveForeground": "#e7e7e799",
+        "activityBarBadge.background": "#051b0b",
+        "activityBarBadge.foreground": "#e7e7e7"
+    },
+    "peacock.color": "#aa4422"
 }
