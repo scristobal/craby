@@ -3,6 +3,8 @@ use std::io::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    pretty_env_logger::init();
+
     tokio::spawn(async move {
         let bot = CrabyBot::new_from_env();
         bot.run().await

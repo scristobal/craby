@@ -18,7 +18,6 @@ impl CrabyBot {
             Err(_) => debug!("No .env file found. Falling back to environment variables"),
         }
 
-        pretty_env_logger::init();
         log::info!("Starting bot...");
 
         let bot = teloxide::Bot::from_env();
