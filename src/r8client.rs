@@ -72,13 +72,15 @@ impl R8Client {
             guidance_scale: None,
         };
 
+        let mut webhook = std::env::var("WEBHOOK_URL")
+            .expect("WEBHOOK_URL must be set and point to current address");
+
+        webhook.push_str("/webhook/test-id");
+
         let body = R8Request {
             version: R8_VERSION.to_string(),
             input,
-            webhook_completed: Some(
-                std::env::var("WEBHOOK_URL")
-                    .expect("WEBHOOK_URL must be set and point to current address"),
-            ),
+            webhook_completed: Some(webhook),
         };
 
         let body = serde_json::to_string(&body).unwrap();
