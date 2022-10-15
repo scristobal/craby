@@ -1,7 +1,6 @@
-use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{dev::Server, post, web, App, HttpResponse, HttpServer, Responder};
 use log::debug;
 use serde::Deserialize;
-use std::io::Result;
 
 #[derive(Deserialize)]
 struct Id {
@@ -15,14 +14,8 @@ async fn webhook(path: web::Path<Id>, req_body: String) -> impl Responder {
     HttpResponse::Ok()
 }
 
-pub struct WebhookServer {}
-
-impl WebhookServer {
-    pub async fn start() -> Result<()> {
-        HttpServer::new(|| App::new().service(webhook))
-            .bind(("127.0.0.1", 8080))?
-            .run()
-            .await?;
-        Ok(())
-    }
+pub fn new_server() -> Result<Server, std::io::Error> {
+    Ok(HttpServer::new(|| App::new().service(webhook))
+        .bind(("127.0.0.1", 8080))?
+        .run())
 }

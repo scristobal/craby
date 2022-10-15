@@ -25,7 +25,7 @@ impl CrabyBot {
         Self { bot }
     }
 
-    pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(self) -> Result<(), std::io::Error> {
         let client = Arc::new(R8Client::new());
 
         teloxide::commands_repl(
