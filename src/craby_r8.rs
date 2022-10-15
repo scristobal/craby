@@ -3,15 +3,9 @@ use std::sync::Arc;
 use dotenv::dotenv;
 
 use log::debug;
-use reqwest::{
-    header::{AUTHORIZATION, CONTENT_TYPE},
-    Client,
-};
-use serde::{Deserialize, Serialize};
 
-use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands};
-
-const R8S_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef";
+use crate::r8client::R8Client;
+use teloxide::{prelude::*, utils::command::BotCommands};
 
 pub struct CrabyBot {
     bot: teloxide::Bot,
@@ -32,14 +26,14 @@ impl CrabyBot {
     }
 
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
-        let client = Arc::new(R8SClient::new());
+        let client = Arc::new(R8Client::new());
 
         teloxide::commands_repl(
             self.bot,
             move |bot: Bot, msg: Message, cmd: Command| {
                 let client = Arc::clone(&client);
                 async move {
-                    client.answer(bot, msg, cmd).await?;
+                    answer(bot, msg, cmd, &client).await?;
                     Ok(())
                 }
             },
@@ -49,22 +43,6 @@ impl CrabyBot {
 
         Ok(())
     }
-}
-
-#[derive(Deserialize, Debug)]
-struct JSONResponse {
-    output: Vec<String>,
-}
-
-#[derive(Serialize, Debug)]
-struct InputParams<'a> {
-    prompt: &'a String,
-}
-
-#[derive(Serialize, Debug)]
-struct JSONRequest<'a> {
-    version: String,
-    input: InputParams<'a>,
 }
 
 #[derive(BotCommands, Clone)]
@@ -78,70 +56,21 @@ enum Command {
     Make(String),
 }
 
-struct R8SClient {
-    client: Client,
-}
+async fn answer(bot: Bot, msg: Message, cmd: Command, client: &R8Client) -> ResponseResult<()> {
+    match cmd {
+        Command::Make(prompt) => {
+            log::info!(
+                "User {} requested {}",
+                msg.chat.username().unwrap_or("unknown"),
+                prompt
+            );
 
-impl R8SClient {
-    pub fn new() -> Self {
-        let client = Client::new();
-        Self { client }
-    }
+            client.request(prompt.clone()).await;
 
-    pub async fn answer(&self, bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
-        match cmd {
-            Command::Make(prompt) => {
-                let url = std::env::var("COG_URL").expect("COG_URL must be set");
+            bot.send_message(msg.chat.id, format!("Requested a {}", prompt))
+                .await?
+        }
+    };
 
-                log::info!(
-                    "User {} requested {}",
-                    msg.chat.username().unwrap_or("unknown"),
-                    prompt
-                );
-
-                let input = InputParams { prompt: &prompt };
-
-                let body = JSONRequest {
-                    version: R8S_VERSION.to_string(),
-                    input,
-                };
-
-                let body = serde_json::to_string(&body).unwrap();
-
-                let token = std::env::var("COG_TOKEN").expect("COG_TOKEN must be set");
-
-                let response = self
-                    .client
-                    .post(url)
-                    .header(CONTENT_TYPE, "application/json")
-                    .header(AUTHORIZATION, "Token ".to_string() + &token)
-                    .body(body)
-                    .send()
-                    .await?;
-
-                debug!("{:#?}", response);
-
-                match response.status() {
-                    reqwest::StatusCode::OK => {
-                        let json_response: JSONResponse = response.json().await?;
-                        debug!("{:#?}", json_response);
-
-                        let img = json_response.output[0].split(",").collect::<Vec<&str>>()[1];
-
-                        let img = base64::decode(img).unwrap();
-
-                        let img = InputFile::memory(img);
-
-                        bot.send_photo(msg.chat.id, img).caption(prompt).await?;
-                    }
-                    _ => {
-                        bot.send_message(msg.chat.id, "Something went wrong")
-                            .await?;
-                    }
-                }
-            }
-        };
-
-        Ok(())
-    }
+    Ok(())
 }
