@@ -5,6 +5,7 @@ use reqwest::{
     Client,
 };
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 
 const R8_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef";
 
@@ -33,6 +34,7 @@ struct Metrics {
     predict_time: f32,
 }
 
+#[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug)]
 struct Input {
     prompt: String,

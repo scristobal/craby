@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use dotenv::dotenv;
 
-use log::debug;
-
 use crate::r8client::R8Client;
+use log::debug;
 use teloxide::{prelude::*, utils::command::BotCommands};
 
 pub struct CrabyBot {
