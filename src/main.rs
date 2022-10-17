@@ -15,7 +15,8 @@ async fn main() -> Result<()> {
     let bot = CrabyBot::new_from_env(Arc::clone(&state));
     tokio::spawn(async move { bot.run().await });
 
-    let sever = craby::webhooks::new_server().expect("Failed to start webhook server");
+    let sever = craby::webhooks::new_server();
+    //  let sever = craby::webhooks::new_server().expect("Failed to start webhook server");
     tokio::spawn(async move { sever.await });
 
     tokio::signal::ctrl_c().await

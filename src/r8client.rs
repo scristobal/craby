@@ -12,7 +12,7 @@ const R8_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd
 const R8_URL: &str = "https://api.replicate.com/v1/predictions";
 
 #[derive(Deserialize, Debug)]
-struct PredictionResponse {
+pub struct PredictionResponse {
     completed_at: Option<String>,
     created_at: Option<String>,
     error: Option<String>,

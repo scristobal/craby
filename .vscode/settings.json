@@ -1,5 +1,5 @@
 {
-    "cSpell.words": ["Craby", "dotenv", "reqwest", "teloxide"],
+    "cSpell.words": ["Craby", "dotenv", "ngrok", "reqwest", "teloxide"],
     "workbench.colorTheme": "paddy-dark-upright",
     "workbench.colorCustomizations": {
         "commandCenter.border": "#e7e7e799",
