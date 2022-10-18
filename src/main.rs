@@ -1,22 +1,22 @@
-use craby::craby_r8::CrabyBot;
-use craby::requests;
+use craby::craby_bot;
+
 use std::io::Result;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     pretty_env_logger::init();
 
-    let state = Arc::new(requests::Requests {
-        counter: Mutex::new(0),
-    });
+    let (tx_jobs, rx_jobs) = mpsc::channel(1);
 
-    let bot = CrabyBot::new_from_env(Arc::clone(&state));
+    let (tx_results, rx_results) = mpsc::channel(1);
+
+    let bot = craby_bot::CrabyBot::build_from_env(rx_results, tx_jobs);
+
     tokio::spawn(async move { bot.run().await });
 
-    let sever = craby::webhooks::new_server();
     //  let sever = craby::webhooks::new_server().expect("Failed to start webhook server");
+    let sever = craby::webhooks::new_server();
     tokio::spawn(async move { sever.await });
 
     tokio::signal::ctrl_c().await

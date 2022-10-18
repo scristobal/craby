@@ -35,12 +35,12 @@ struct Metrics {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug)]
-struct Input {
-    prompt: String,
-    seed: Option<u32>,
-    num_inference_steps: Option<u32>,
-    guidance_scale: Option<f32>,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Input {
+    pub prompt: String,
+    pub seed: Option<u32>,
+    pub num_inference_steps: Option<u32>,
+    pub guidance_scale: Option<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -66,23 +66,14 @@ impl R8Client {
         Self { client }
     }
 
-    pub async fn request(&self, prompt: String) {
-        let input = Input {
-            prompt,
-            seed: None,
-            num_inference_steps: None,
-            guidance_scale: None,
-        };
-
-        let mut webhook = std::env::var("WEBHOOK_URL")
+    pub async fn request(&self, input: Input, id: String) {
+        let webhook = std::env::var("WEBHOOK_URL")
             .expect("WEBHOOK_URL must be set and point to current address");
-
-        webhook.push_str("/webhook/test-id");
 
         let body = R8Request {
             version: R8_VERSION.to_string(),
             input,
-            webhook_completed: Some(webhook),
+            webhook_completed: Some(format!("{}/webhook/{}", webhook, id)),
         };
 
         let body = serde_json::to_string(&body).unwrap();

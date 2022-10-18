@@ -1,16 +1,25 @@
+use std::collections::HashMap;
+
 use tokio::sync::Mutex;
 
+use crate::r8client::Input;
+
 pub struct Requests {
-    pub counter: Mutex<i32>,
+    pub inputs: Mutex<HashMap<String, Input>>,
 }
 
 impl Requests {
-    pub async fn increment(&self) {
-        let mut counter = self.counter.lock().await;
-        *counter += 1;
+    pub async fn add(&self, id: String, input: Input) -> Option<Input> {
+        let mut inputs = self.inputs.lock().await;
+        inputs.insert(id, input)
     }
 
-    pub async fn read(&self) -> i32 {
-        *self.counter.lock().await
+    pub async fn read(&self, id: String) -> Option<Input> {
+        let inputs = &self.inputs.lock().await;
+        if let Some(input) = inputs.get(&id) {
+            return Some(input.clone());
+        } else {
+            return None;
+        }
     }
 }
