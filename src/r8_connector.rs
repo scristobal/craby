@@ -1,11 +1,14 @@
 #![allow(dead_code)]
 use log::debug;
+
 use reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Client,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
+
+use warp::Filter;
 
 const R8_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef";
 
@@ -92,4 +95,17 @@ impl R8Client {
 
         debug!("{:#?}", response);
     }
+}
+
+pub async fn new_server() {
+    let webhooks = warp::post()
+        .and(warp::path::param())
+        .and(warp::body::content_length_limit(1024 * 16))
+        .and(warp::body::json())
+        .map(|id: String, body: PredictionResponse| {
+            debug!("Got a webhook from {} with body {:?}", id, body);
+            ""
+        });
+
+    warp::serve(webhooks).run(([127, 0, 0, 1], 8080)).await
 }

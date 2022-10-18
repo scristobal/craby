@@ -1,4 +1,4 @@
-use craby::craby_bot;
+use craby::craby_bot::CrabyBot;
 
 use std::io::Result;
 use tokio::sync::mpsc;
@@ -11,7 +11,7 @@ async fn main() -> Result<()> {
 
     let (tx_results, rx_results) = mpsc::channel(1);
 
-    let bot = craby_bot::CrabyBot::build_from_env(rx_results, tx_jobs);
+    let bot = CrabyBot::build_from_env(rx_results, tx_jobs);
 
     tokio::spawn(async move { bot.run().await });
 

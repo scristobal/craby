@@ -6,16 +6,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use log::debug;
 use teloxide::{prelude::*, utils::command::BotCommands};
 
-pub struct JobRequest {
-    prompt: String,
-    channel_id: String,
-}
-
-pub struct JobResult {
-    url: Option<String>,
-    error: Option<String>,
-    channel_id: String,
-}
+use crate::jobs_channels::{JobRequest, JobResult};
 
 pub struct CrabyBot {
     bot: teloxide::Bot,
