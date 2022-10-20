@@ -59,7 +59,7 @@ enum Command {
 }
 
 async fn answer(
-    _bot: teloxide::Bot,
+    bot: teloxide::Bot,
     msg: Message,
     cmd: Command,
     connector: Arc<Connector>,
@@ -79,7 +79,11 @@ async fn answer(
                 guidance_scale: None,
             };
 
-            connector.request(input, msg.chat.id.to_string()).await
+            let response = connector.request(input, msg.chat.id.to_string()).await?;
+
+            bot.send_message(msg.chat.id.to_string(), format!("{:?}", response));
+
+            Ok(response)
         }
     }
 }
