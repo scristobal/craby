@@ -1,4 +1,4 @@
-use craby::craby_bot::CrabyBot;
+use craby::{craby_bot::CrabyBot, r8_connector::Connector};
 
 use std::io::Result;
 use tokio::sync::mpsc;
@@ -15,9 +15,8 @@ async fn main() -> Result<()> {
 
     tokio::spawn(async move { bot.run().await });
 
-    //  let sever = craby::webhooks::new_server().expect("Failed to start webhook server");
-    let sever = craby::webhooks::new_server();
-    tokio::spawn(async move { sever.await });
+    let connector = Connector::new();
+    tokio::spawn(async move { connector.run().await });
 
     tokio::signal::ctrl_c().await
 }
