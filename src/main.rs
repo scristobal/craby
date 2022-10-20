@@ -1,22 +1,18 @@
-use craby::{craby_bot::CrabyBot, r8_connector::Connector};
+use craby::{connector::Connector, craby_bot::CrabyBot};
 
-use std::io::Result;
-use tokio::sync::mpsc;
+use std::{io::Result, sync::Arc};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     pretty_env_logger::init();
 
-    let (tx_jobs, rx_jobs) = mpsc::channel(1);
+    let connector = Arc::new(Connector::new());
 
-    let (tx_results, rx_results) = mpsc::channel(1);
+    tokio::spawn(async { connector.run().await });
 
-    let bot = CrabyBot::build_from_env(rx_results, tx_jobs);
+    let bot = CrabyBot::build_from_env(connector);
 
-    tokio::spawn(async move { bot.run().await });
-
-    let connector = Connector::new();
-    tokio::spawn(async move { connector.run().await });
+    tokio::spawn(async { bot.run().await });
 
     tokio::signal::ctrl_c().await
 }

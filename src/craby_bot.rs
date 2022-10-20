@@ -1,21 +1,20 @@
 use std::sync::Arc;
 
 use dotenv::dotenv;
-use tokio::sync::mpsc::{Receiver, Sender};
 
 use log::debug;
+use reqwest::Error;
 use teloxide::{prelude::*, utils::command::BotCommands};
 
-use crate::jobs_channels::{JobRequest, JobResult};
+use crate::connector::{Connector, Input, PredictionResponse};
 
 pub struct CrabyBot {
     bot: teloxide::Bot,
-    tx: Sender<JobRequest>,
-    rx: Receiver<JobResult>,
+    connector: Arc<Connector>,
 }
 
 impl CrabyBot {
-    pub fn build_from_env(rx: Receiver<JobResult>, tx: Sender<JobRequest>) -> Self {
+    pub fn build_from_env(connector: Arc<Connector>) -> Self {
         match dotenv() {
             Ok(_) => debug!("Loaded .env file"),
             Err(_) => debug!("No .env file found. Falling back to environment variables"),
@@ -25,52 +24,19 @@ impl CrabyBot {
 
         let bot = teloxide::Bot::from_env();
 
-        Self { bot, rx, tx }
+        Self { bot, connector }
     }
 
     pub async fn run(self) -> Result<(), std::io::Error> {
         let bot = Arc::new(self.bot);
 
-        let forward_result = || {
-            let mut rx = self.rx;
-            let bot = Arc::clone(&bot);
-
-            tokio::spawn(async move {
-                loop {
-                    let result = rx.recv();
-
-                    match result.await {
-                        Some(result) => {
-                            if let Some(error) = result.error {
-                                log::error!("Received an error from results channel: {}", error);
-                                if let Err(error) = bot
-                                    .send_message(result.channel_id, format!("Error: {}", error))
-                                    .await
-                                {
-                                    log::error!("Error sending error message: {}", error);
-                                }
-                            } else if let Some(url) = result.url {
-                                if let Err(error) = bot.send_message(result.channel_id, url).await {
-                                    log::error!("Error sending error message: {}", error);
-                                }
-                            }
-                        }
-                        None => {
-                            todo!()
-                        }
-                    }
-                }
-            })
-        };
-
-        forward_result();
-
         teloxide::commands_repl(
             Arc::clone(&bot),
             move |bot: Bot, msg: Message, cmd: Command| {
-                let tx = self.tx.clone();
+                let connector = Arc::clone(&self.connector);
+
                 async move {
-                    answer(bot, msg, cmd, tx).await?;
+                    answer(bot, msg, cmd, connector).await?;
                     Ok(())
                 }
             },
@@ -93,11 +59,11 @@ enum Command {
 }
 
 async fn answer(
-    bot: teloxide::Bot,
+    _bot: teloxide::Bot,
     msg: Message,
     cmd: Command,
-    tx: Sender<JobRequest>,
-) -> ResponseResult<()> {
+    connector: Arc<Connector>,
+) -> Result<PredictionResponse, Error> {
     match cmd {
         Command::Make(prompt) => {
             log::info!(
@@ -106,18 +72,14 @@ async fn answer(
                 prompt
             );
 
-            let job = JobRequest {
+            let input = Input {
                 prompt,
-                channel_id: msg.chat.id.to_string(),
+                num_inference_steps: None,
+                seed: None,
+                guidance_scale: None,
             };
 
-            if let Err(error) = tx.send(job).await {
-                log::error!("Failed to send job to worker channel: {}", error);
-                bot.send_message(msg.chat.id, format!("Error: {}", error))
-                    .await?;
-            }
+            connector.request(input, msg.chat.id.to_string()).await
         }
-    };
-
-    Ok(())
+    }
 }
