@@ -62,14 +62,20 @@ async fn answer(bot: teloxide::Bot, msg: Message, cmd: Command, connector: Arc<C
                 guidance_scale: None,
             };
 
-            if let Ok(response) = connector.request(input, msg.chat.id.to_string()).await {
-                if let Ok(_) = bot
-                    .send_message(msg.chat.id.to_string(), format!("{:?}", response))
-                    .await
-                {
-                    todo!()
+            match connector.request(input, msg.chat.id.to_string()).await {
+                Ok(response) => {
+                    match bot
+                        .send_message(msg.chat.id.to_string(), format!("{:?}", response))
+                        .await
+                    {
+                        Ok(_) => log::info!("Job {} completed", msg.chat.id.to_string()),
+                        Err(e) => log::error!("Error on delivery {}", e),
+                    };
                 }
-            };
+                Err(e) => {
+                    log::error!("Error on request {}", e)
+                }
+            }
         }
     }
 }

@@ -17,7 +17,7 @@ const MODEL_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b1
 
 const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct PredictionResponse {
     completed_at: Option<String>,
     created_at: Option<String>,
@@ -35,7 +35,7 @@ pub struct PredictionResponse {
     webhook_completed: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct Metrics {
     predict_time: f32,
 }
@@ -49,7 +49,7 @@ pub struct Input {
     pub guidance_scale: Option<f32>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct Urls {
     get: String,
     cancel: String,
@@ -65,35 +65,52 @@ struct PredictionRequest {
 pub struct Connector {
     client: Client,
     notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
+    predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
 }
 
 impl Connector {
-    pub fn new(notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>) -> Self {
+    pub fn new(
+        notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
+        predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
+    ) -> Self {
         let client = Client::new();
 
-        Connector { client, notifiers }
+        Connector {
+            client,
+            notifiers,
+            predictions,
+        }
     }
 
-    pub async fn request(&self, input: Input, id: String) -> Result<PredictionResponse, Error> {
+    pub async fn request(&self, input: Input, id: String) -> Result<PredictionResponse, String> {
         // call model_request
-        let req = self.model_request(&input, &id).await;
-
-        let notifiers = &mut self.notifiers.lock().await;
+        self.model_request(&input, &id).await?;
 
         let notifier = Arc::new(Notify::new());
 
-        notifiers.insert(id, Arc::clone(&notifier));
+        {
+            let notifiers = &mut self.notifiers.lock().await;
+
+            notifiers.insert(id.clone(), Arc::clone(&notifier));
+        }
 
         notifier.notified().await;
 
-        req
+        let predictions = self.predictions.lock().await;
 
-        // "wait" until the predictions hashmap gets updated,
-        // maybe using tokio::Notify ? hasmap<string,notifiy> ??
-        // maybe using a channel ?
+        let prediction = predictions.get(&id);
+
+        match prediction {
+            Some(prediction) => Ok((*prediction).clone()),
+            None => Err(format!("Prediction {} not found", &id)),
+        }
     }
 
-    async fn model_request(&self, input: &Input, id: &String) -> Result<PredictionResponse, Error> {
+    async fn model_request(
+        &self,
+        input: &Input,
+        id: &String,
+    ) -> Result<PredictionResponse, String> {
         let webhook = std::env::var("WEBHOOK_URL")
             .expect("WEBHOOK_URL must be set and point to current address");
 
@@ -115,11 +132,19 @@ impl Connector {
             .header(AUTHORIZATION, "Token ".to_string() + &token)
             .body(body)
             .send()
-            .await?;
+            .await;
 
         debug!("{:#?}", response);
 
-        response.json::<PredictionResponse>().await
+        if let Ok(prediction) = response {
+            if let Ok(prediction) = prediction.json::<PredictionResponse>().await {
+                Ok(prediction)
+            } else {
+                Err("Failed to parse JSON on prediction result".to_string())
+            }
+        } else {
+            Err("Failed to get answer to request".to_string())
+        }
     }
 }
 
@@ -131,7 +156,7 @@ pub async fn start_server(
     let notifiers_filter = warp::any().map(move || Arc::clone(&notifiers));
 
     let webhooks = warp::post()
-        .and(warp::path::param())
+        .and(warp::path!("webhook" / String))
         .and(warp::body::content_length_limit(1024 * 16))
         .and(warp::body::json())
         .and(predictions_filter.clone())
