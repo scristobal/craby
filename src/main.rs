@@ -12,13 +12,13 @@ async fn main() -> Result<()> {
 
     let predictions = Arc::new(Mutex::new(HashMap::new()));
 
-    tokio::spawn(async { start_server(predictions) });
+    tokio::spawn(async { start_server(predictions).await });
 
     let connector = Arc::new(Connector::new());
 
     let bot = bot::build_from_env();
 
-    tokio::spawn(async { bot::run(bot, connector) });
+    tokio::spawn(async { bot::run(bot, connector).await });
 
     tokio::signal::ctrl_c().await
 }
