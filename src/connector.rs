@@ -63,7 +63,7 @@ struct PredictionRequest {
 }
 
 pub struct Connector {
-    client: Arc<Client>,
+    client: Client,
 }
 
 pub struct Predictions(Arc<Mutex<HashMap<String, PredictionResponse>>>);
@@ -76,7 +76,7 @@ impl Predictions {
 
 impl Connector {
     pub fn new() -> Self {
-        let client = Arc::new(Client::new());
+        let client = Client::new();
 
         Connector { client }
     }
@@ -89,8 +89,6 @@ impl Connector {
         let webhook = std::env::var("WEBHOOK_URL")
             .expect("WEBHOOK_URL must be set and point to current address");
 
-        let client = Arc::clone(&self.client);
-
         let body = PredictionRequest {
             version: MODEL_VERSION.to_string(),
             input: input.clone(),
@@ -102,7 +100,8 @@ impl Connector {
         let token =
             std::env::var("R8_TOKEN").expect("Replicate's token must be set at R8_TOKEN var");
 
-        let response = client
+        let response = self
+            .client
             .post(MODEL_URL.to_string())
             .header(CONTENT_TYPE, "application/json")
             .header(AUTHORIZATION, "Token ".to_string() + &token)
