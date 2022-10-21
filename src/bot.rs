@@ -66,7 +66,9 @@ async fn answer(bot: teloxide::Bot, msg: Message, cmd: Command, connector: Arc<C
                 if let Ok(_) = bot
                     .send_message(msg.chat.id.to_string(), format!("{:?}", response))
                     .await
-                {}
+                {
+                    todo!()
+                }
             };
         }
     }

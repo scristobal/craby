@@ -5,12 +5,12 @@ use log::debug;
 
 use reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
-    Client, Error, Response,
+    Client, Error,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 use warp::Filter;
 
 const MODEL_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef";
@@ -64,28 +64,36 @@ struct PredictionRequest {
 
 pub struct Connector {
     client: Client,
-}
-
-pub struct Predictions(Arc<Mutex<HashMap<String, PredictionResponse>>>);
-
-impl Predictions {
-    pub fn new() -> Self {
-        Predictions(Arc::new(Mutex::new(HashMap::new())))
-    }
+    notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
 }
 
 impl Connector {
-    pub fn new() -> Self {
+    pub fn new(notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>) -> Self {
         let client = Client::new();
 
-        Connector { client }
+        Connector { client, notifiers }
     }
 
-    pub async fn request(&self, _input: Input, _id: String) -> Result<PredictionResponse, Error> {
-        todo!();
+    pub async fn request(&self, input: Input, id: String) -> Result<PredictionResponse, Error> {
+        // call model_request
+        let req = self.model_request(&input, &id).await;
+
+        let notifiers = &mut self.notifiers.lock().await;
+
+        let notifier = Arc::new(Notify::new());
+
+        notifiers.insert(id, Arc::clone(&notifier));
+
+        notifier.notified().await;
+
+        req
+
+        // "wait" until the predictions hashmap gets updated,
+        // maybe using tokio::Notify ? hasmap<string,notifiy> ??
+        // maybe using a channel ?
     }
 
-    async fn model_request(&self, input: Input, id: String) -> Result<Response, Error> {
+    async fn model_request(&self, input: &Input, id: &String) -> Result<PredictionResponse, Error> {
         let webhook = std::env::var("WEBHOOK_URL")
             .expect("WEBHOOK_URL must be set and point to current address");
 
@@ -107,31 +115,45 @@ impl Connector {
             .header(AUTHORIZATION, "Token ".to_string() + &token)
             .body(body)
             .send()
-            .await;
+            .await?;
 
         debug!("{:#?}", response);
 
-        response
+        response.json::<PredictionResponse>().await
     }
 }
 
-pub async fn start_server(predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>) {
+pub async fn start_server(
+    predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
+    notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
+) {
     let predictions_filter = warp::any().map(move || Arc::clone(&predictions));
+    let notifiers_filter = warp::any().map(move || Arc::clone(&notifiers));
 
     let webhooks = warp::post()
         .and(warp::path::param())
         .and(warp::body::content_length_limit(1024 * 16))
         .and(warp::body::json())
         .and(predictions_filter.clone())
+        .and(notifiers_filter.clone())
         .map(
             |id: String,
              body: PredictionResponse,
-             predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>| {
+             predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
+             notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>| {
                 debug!("Got a webhook from {} with body {:?}", id, body);
 
                 tokio::spawn(async move {
                     let predictions = &mut predictions.lock().await;
-                    predictions.insert(id, body);
+                    predictions.insert(id.clone(), body);
+
+                    let notifiers = notifiers.lock().await;
+                    let notifier = notifiers.get(&id);
+                    if let Some(notifier) = notifier {
+                        notifier.notify_one();
+                    } else {
+                        log::error!("Job {} has no notifier registered ", id)
+                    }
                 });
 
                 ""
