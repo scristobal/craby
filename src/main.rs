@@ -1,18 +1,24 @@
-use craby::{connector::Connector, craby_bot::CrabyBot};
+use craby::{
+    bot,
+    connector::{start_server, Connector},
+};
+use tokio::sync::Mutex;
 
-use std::{io::Result, sync::Arc};
+use std::{collections::HashMap, io::Result, sync::Arc};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     pretty_env_logger::init();
 
+    let predictions = Arc::new(Mutex::new(HashMap::new()));
+
+    tokio::spawn(async { start_server(predictions) });
+
     let connector = Arc::new(Connector::new());
 
-    tokio::spawn(async { connector.run().await });
+    let bot = bot::build_from_env();
 
-    let bot = CrabyBot::build_from_env(connector);
-
-    tokio::spawn(async { bot.run().await });
+    tokio::spawn(async { bot::run(bot, connector) });
 
     tokio::signal::ctrl_c().await
 }

@@ -63,48 +63,25 @@ struct PredictionRequest {
 }
 
 pub struct Connector {
-    predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
     client: Arc<Client>,
+}
+
+pub struct Predictions(Arc<Mutex<HashMap<String, PredictionResponse>>>);
+
+impl Predictions {
+    pub fn new() -> Self {
+        Predictions(Arc::new(Mutex::new(HashMap::new())))
+    }
 }
 
 impl Connector {
     pub fn new() -> Self {
-        let predictions = Arc::new(Mutex::new(HashMap::new()));
         let client = Arc::new(Client::new());
 
-        Connector {
-            predictions,
-            client,
-        }
+        Connector { client }
     }
 
-    pub async fn run(self) {
-        let predictions_filter = warp::any().map(move || Arc::clone(&self.predictions));
-
-        let webhooks = warp::post()
-            .and(warp::path::param())
-            .and(warp::body::content_length_limit(1024 * 16))
-            .and(warp::body::json())
-            .and(predictions_filter.clone())
-            .map(
-                |id: String,
-                 body: PredictionResponse,
-                 predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>| {
-                    debug!("Got a webhook from {} with body {:?}", id, body);
-
-                    tokio::spawn(async move {
-                        let predictions = &mut predictions.lock().await;
-                        predictions.insert(id, body);
-                    });
-
-                    ""
-                },
-            );
-
-        warp::serve(webhooks).run(([127, 0, 0, 1], 8080)).await;
-    }
-
-    pub async fn request(&self, input: Input, id: String) -> Result<PredictionResponse, Error> {
+    pub async fn request(&self, _input: Input, _id: String) -> Result<PredictionResponse, Error> {
         todo!();
     }
 
@@ -137,4 +114,30 @@ impl Connector {
 
         response
     }
+}
+
+pub async fn start_server(predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>) {
+    let predictions_filter = warp::any().map(move || Arc::clone(&predictions));
+
+    let webhooks = warp::post()
+        .and(warp::path::param())
+        .and(warp::body::content_length_limit(1024 * 16))
+        .and(warp::body::json())
+        .and(predictions_filter.clone())
+        .map(
+            |id: String,
+             body: PredictionResponse,
+             predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>| {
+                debug!("Got a webhook from {} with body {:?}", id, body);
+
+                tokio::spawn(async move {
+                    let predictions = &mut predictions.lock().await;
+                    predictions.insert(id, body);
+                });
+
+                ""
+            },
+        );
+
+    warp::serve(webhooks).run(([127, 0, 0, 1], 8080)).await;
 }
