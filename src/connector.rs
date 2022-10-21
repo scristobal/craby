@@ -100,12 +100,10 @@ impl Connector {
 
         let predictions = self.predictions.lock().await;
 
-        let prediction = predictions.get(&id);
-
-        match prediction {
-            Some(prediction) => Ok((*prediction).clone()),
-            None => Err(format!("Prediction {} not found", &id)),
-        }
+        predictions
+            .get(&id)
+            .map(|p| p.clone())
+            .ok_or(format!("Prediction {} not found", &id))
     }
 
     async fn model_request(
@@ -149,38 +147,37 @@ pub async fn start_server(
     let predictions_filter = warp::any().map(move || Arc::clone(&predictions));
     let notifiers_filter = warp::any().map(move || Arc::clone(&notifiers));
 
+    let process_entry =
+        |id: String,
+         body: PredictionResponse,
+         predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
+         notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>| {
+            debug!("Got a webhook from {} with body {:?}", id, body);
+
+            tokio::spawn(async move {
+                let predictions = &mut predictions.lock().await;
+                predictions.insert(id.clone(), body);
+
+                let notifiers = notifiers.lock().await;
+                let notifier = notifiers.get(&id);
+
+                if let Some(notifier) = notifier {
+                    notifier.notify_one();
+                } else {
+                    log::error!("Job {} has no notifier registered ", id)
+                }
+            });
+
+            ""
+        };
+
     let webhooks = warp::post()
         .and(warp::path!("webhook" / String))
         .and(warp::body::content_length_limit(1024 * 16))
         .and(warp::body::json())
         .and(predictions_filter.clone())
         .and(notifiers_filter.clone())
-        .map(
-            |id: String,
-             body: PredictionResponse,
-             predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
-             notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>| {
-                debug!("Got a webhook from {} with body {:?}", id, body);
-
-                tokio::spawn(async move {
-                    let predictions = &mut predictions.lock().await;
-                    predictions.insert(id.clone(), body);
-
-                    let notifiers = notifiers.lock().await;
-                    let notifier = notifiers.get(&id);
-
-                    log::debug!("{:?}", notifiers);
-
-                    if let Some(notifier) = notifier {
-                        notifier.notify_one();
-                    } else {
-                        log::error!("Job {} has no notifier registered ", id)
-                    }
-                });
-
-                ""
-            },
-        );
+        .map(process_entry);
 
     warp::serve(webhooks).run(([127, 0, 0, 1], 8080)).await;
 }
