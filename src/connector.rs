@@ -5,7 +5,7 @@ use log::debug;
 
 use reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
-    Client, Error,
+    Client,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
@@ -83,8 +83,10 @@ impl Connector {
     }
 
     pub async fn request(&self, input: Input, id: String) -> Result<PredictionResponse, String> {
-        // call model_request
-        self.model_request(&input, &id).await?;
+        match self.model_request(&input, &id).await {
+            Ok(_) => {}
+            Err(e) => return Err(format!("server error {}", e)),
+        }
 
         let notifier = Arc::new(Notify::new());
 
@@ -110,7 +112,7 @@ impl Connector {
         &self,
         input: &Input,
         id: &String,
-    ) -> Result<PredictionResponse, String> {
+    ) -> Result<reqwest::Response, reqwest::Error> {
         let webhook = std::env::var("WEBHOOK_URL")
             .expect("WEBHOOK_URL must be set and point to current address");
 
@@ -136,15 +138,7 @@ impl Connector {
 
         debug!("{:#?}", response);
 
-        if let Ok(prediction) = response {
-            if let Ok(prediction) = prediction.json::<PredictionResponse>().await {
-                Ok(prediction)
-            } else {
-                Err("Failed to parse JSON on prediction result".to_string())
-            }
-        } else {
-            Err("Failed to get answer to request".to_string())
-        }
+        response
     }
 }
 
@@ -174,6 +168,9 @@ pub async fn start_server(
 
                     let notifiers = notifiers.lock().await;
                     let notifier = notifiers.get(&id);
+
+                    log::debug!("{:?}", notifiers);
+
                     if let Some(notifier) = notifier {
                         notifier.notify_one();
                     } else {
