@@ -84,7 +84,9 @@ impl Connector {
 
     pub async fn request(&self, input: Input, id: String) -> Result<PredictionResponse, String> {
         match self.model_request(&input, &id).await {
-            Ok(_) => {}
+            Ok(response) => {
+                log::debug!("{:?}", response)
+            }
             Err(e) => return Err(format!("server error {}", e)),
         }
 
@@ -92,16 +94,20 @@ impl Connector {
 
         {
             let notifiers = &mut self.notifiers.lock().await;
-
             notifiers.insert(id.clone(), Arc::clone(&notifier));
         }
 
         notifier.notified().await;
 
-        let predictions = self.predictions.lock().await;
+        {
+            let notifiers = &mut self.notifiers.lock().await;
+            notifiers.remove(&id);
+        }
+
+        let predictions = &mut self.predictions.lock().await;
 
         predictions
-            .get(&id)
+            .remove(&id)
             .map(|p| p.clone())
             .ok_or(format!("Prediction {} not found", &id))
     }
@@ -112,7 +118,7 @@ impl Connector {
         id: &String,
     ) -> Result<reqwest::Response, reqwest::Error> {
         let webhook = std::env::var("WEBHOOK_URL")
-            .expect("WEBHOOK_URL must be set and point to current address");
+            .expect("env variable WEBHOOK_URL should be set to current address");
 
         let body = PredictionRequest {
             version: MODEL_VERSION.to_string(),
@@ -122,21 +128,16 @@ impl Connector {
 
         let body = serde_json::to_string(&body).unwrap();
 
-        let token =
-            std::env::var("R8_TOKEN").expect("Replicate's token must be set at R8_TOKEN var");
+        let token = std::env::var("R8_TOKEN")
+            .expect("en variable R8_TOKEN should be set to a valid replicate.com token");
 
-        let response = self
-            .client
+        self.client
             .post(MODEL_URL.to_string())
             .header(CONTENT_TYPE, "application/json")
             .header(AUTHORIZATION, "Token ".to_string() + &token)
             .body(body)
             .send()
-            .await;
-
-        debug!("{:#?}", response);
-
-        response
+            .await
     }
 }
 
@@ -144,8 +145,8 @@ pub async fn start_server(
     predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
     notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
 ) {
-    let predictions_filter = warp::any().map(move || Arc::clone(&predictions));
-    let notifiers_filter = warp::any().map(move || Arc::clone(&notifiers));
+    let use_predictions = warp::any().map(move || Arc::clone(&predictions));
+    let use_notifiers = warp::any().map(move || Arc::clone(&notifiers));
 
     let process_entry =
         |id: String,
@@ -175,8 +176,8 @@ pub async fn start_server(
         .and(warp::path!("webhook" / String))
         .and(warp::body::content_length_limit(1024 * 16))
         .and(warp::body::json())
-        .and(predictions_filter.clone())
-        .and(notifiers_filter.clone())
+        .and(use_predictions)
+        .and(use_notifiers)
         .map(process_entry);
 
     warp::serve(webhooks).run(([127, 0, 0, 1], 8080)).await;
