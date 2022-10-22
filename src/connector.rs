@@ -162,14 +162,13 @@ pub async fn start_server(
                 let notifiers = notifiers.lock().await;
                 let notifier = notifiers.get(&id);
 
-                if let Some(notifier) = notifier {
-                    notifier.notify_one();
-                } else {
-                    log::error!("Job {} has no notifier registered ", id)
+                match notifier {
+                    Some(notifier) => notifier.notify_one(),
+                    None => log::error!("Job {} has no notifier registered ", id),
                 }
             });
 
-            ""
+            reqwest::StatusCode::OK
         };
 
     let webhooks = warp::post()
