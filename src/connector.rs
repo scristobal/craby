@@ -69,11 +69,16 @@ pub struct Connector {
 }
 
 impl Connector {
-    pub fn new(
-        notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
-        predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
-    ) -> Self {
+    pub fn new() -> Self {
         let client = Client::new();
+
+        let predictions = Arc::new(Mutex::new(HashMap::new()));
+        let notifiers = Arc::new(Mutex::new(HashMap::new()));
+
+        let predictions_server = Arc::clone(&predictions);
+        let notifiers_server = Arc::clone(&notifiers);
+
+        tokio::spawn(async { start_server(predictions_server, notifiers_server).await });
 
         Connector {
             client,

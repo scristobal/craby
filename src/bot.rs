@@ -28,7 +28,9 @@ enum Command {
     Make(String),
 }
 
-pub async fn run(bot: teloxide::Bot, connector: Arc<Connector>) -> Result<(), RequestError> {
+pub async fn run(bot: teloxide::Bot, connector: Connector) -> Result<(), RequestError> {
+    let connector = Arc::new(connector);
+
     teloxide::commands_repl(
         bot,
         move |bot: Bot, msg: Message, cmd: Command| {
