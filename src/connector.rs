@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use std::{collections::HashMap, sync::Arc};
 
-use log::debug;
+use log;
 
 use reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
@@ -24,7 +24,7 @@ pub struct PredictionResponse {
     error: Option<String>,
     hardware: String,
     id: String,
-    input: Input,
+    pub input: Input,
     logs: String,
     metrics: Metrics,
     output: Option<Vec<String>>,
@@ -88,12 +88,9 @@ impl Connector {
     }
 
     pub async fn request(&self, input: Input, id: String) -> Result<PredictionResponse, String> {
-        match self.model_request(&input, &id).await {
-            Ok(response) => {
-                log::debug!("{:?}", response)
-            }
-            Err(e) => return Err(format!("server error {}", e)),
-        }
+        self.model_request(&input, &id)
+            .await
+            .map_err(|e| format!("job:{} status:error server error {}", id, e))?;
 
         let notifier = Arc::new(Notify::new());
 
@@ -103,6 +100,7 @@ impl Connector {
         }
 
         notifier.notified().await;
+        log::debug!("job:{} status:notified", id);
 
         {
             let notifiers = &mut self.notifiers.lock().await;
@@ -111,10 +109,10 @@ impl Connector {
 
         let predictions = &mut self.predictions.lock().await;
 
-        predictions
-            .remove(&id)
-            .map(|p| p.clone())
-            .ok_or(format!("Prediction {} not found", &id))
+        predictions.remove(&id).map(|p| p.clone()).ok_or(format!(
+            "job:{} status:error unable to find prediction result",
+            &id
+        ))
     }
 
     async fn model_request(
@@ -123,7 +121,7 @@ impl Connector {
         id: &String,
     ) -> Result<reqwest::Response, reqwest::Error> {
         let webhook = std::env::var("WEBHOOK_URL")
-            .expect("env variable WEBHOOK_URL should be set to current address");
+            .expect("env variable WEBHOOK_URL should be set to public address");
 
         let body = PredictionRequest {
             version: MODEL_VERSION.to_string(),
@@ -158,7 +156,7 @@ pub async fn start_server(
          body: PredictionResponse,
          predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
          notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>| {
-            debug!("Got a webhook from {} with body {:?}", id, body);
+            log::debug!("job:{} status:processed from webhook", id);
 
             tokio::spawn(async move {
                 let predictions = &mut predictions.lock().await;
@@ -169,7 +167,7 @@ pub async fn start_server(
 
                 match notifier {
                     Some(notifier) => notifier.notify_one(),
-                    None => log::error!("Job {} has no notifier registered ", id),
+                    None => log::error!("job:{} status:error there is no notifier registered", id),
                 }
             });
 

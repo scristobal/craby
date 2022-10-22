@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use dotenv::dotenv;
 
-use log::debug;
+use log;
 use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 
@@ -15,8 +15,8 @@ pub struct CrabyBot {
 impl CrabyBot {
     pub fn new_from_env() -> Self {
         match dotenv() {
-            Ok(_) => debug!("Loaded .env file"),
-            Err(_) => debug!("No .env file found. Falling back to environment variables"),
+            Ok(_) => log::debug!("Loaded .env file"),
+            Err(_) => log::debug!("No .env file found. Falling back to environment variables"),
         }
 
         pretty_env_logger::init();
@@ -86,8 +86,6 @@ async fn answer(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
                 .body(body)
                 .send()
                 .await?;
-
-            debug!("{:#?}", response);
 
             match response.status() {
                 reqwest::StatusCode::OK => {

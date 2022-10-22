@@ -2,15 +2,15 @@ use std::sync::Arc;
 
 use dotenv::dotenv;
 
-use log::debug;
+use log;
 use teloxide::{prelude::*, utils::command::BotCommands, RequestError};
 
 use crate::connector::{Connector, Input};
 
 pub fn build_from_env() -> teloxide::Bot {
     match dotenv() {
-        Ok(_) => debug!("Loaded .env file"),
-        Err(_) => debug!("No .env file found. Falling back to environment variables"),
+        Ok(_) => log::info!("Loaded .env file"),
+        Err(_) => log::info!("No .env file found. Falling back to environment variables"),
     }
 
     log::info!("Starting bot...");
@@ -52,7 +52,8 @@ async fn answer(bot: teloxide::Bot, msg: Message, cmd: Command, connector: Arc<C
     match cmd {
         Command::Make(prompt) => {
             log::info!(
-                "User {} requested {}",
+                "job:{} status:init user {} prompt {}",
+                msg.chat.id.to_string(),
                 msg.chat.username().unwrap_or("unknown"),
                 prompt
             );
@@ -70,12 +71,20 @@ async fn answer(bot: teloxide::Bot, msg: Message, cmd: Command, connector: Arc<C
                         .send_message(msg.chat.id.to_string(), format!("{:?}", response))
                         .await
                     {
-                        Ok(_) => log::info!("Job {} completed", msg.chat.id.to_string()),
-                        Err(e) => log::error!("Error on delivery {}", e),
+                        Ok(_) => log::info!("job:{} status:completed", msg.chat.id.to_string()),
+                        Err(e) => log::error!(
+                            "job:{} status:error on delivery {}",
+                            msg.chat.id.to_string(),
+                            e
+                        ),
                     };
                 }
                 Err(e) => {
-                    log::error!("Error on request {}", e)
+                    log::error!(
+                        "job:{} status:error on request {}",
+                        msg.chat.id.to_string(),
+                        e
+                    )
                 }
             }
         }
