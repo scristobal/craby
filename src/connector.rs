@@ -102,11 +102,6 @@ impl Connector {
         notifier.notified().await;
         log::debug!("job:{} status:notified", id);
 
-        {
-            let notifiers = &mut self.notifiers.lock().await;
-            notifiers.remove(&id);
-        }
-
         let predictions = &mut self.predictions.lock().await;
 
         predictions.remove(&id).map(|p| p.clone()).ok_or(format!(
@@ -162,8 +157,8 @@ pub async fn start_server(
                 let predictions = &mut predictions.lock().await;
                 predictions.insert(id.clone(), body);
 
-                let notifiers = notifiers.lock().await;
-                let notifier = notifiers.get(&id);
+                let notifiers = &mut notifiers.lock().await;
+                let notifier = notifiers.remove(&id);
 
                 match notifier {
                     Some(notifier) => notifier.notify_one(),
