@@ -3,7 +3,7 @@ use std::sync::Arc;
 use dotenv::dotenv;
 
 use log;
-use teloxide::{prelude::*, utils::command::BotCommands, RequestError};
+use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands, RequestError};
 
 use crate::connector::{Connector, Input};
 
@@ -51,9 +51,11 @@ pub async fn run(bot: teloxide::Bot, connector: Connector) -> Result<(), Request
 async fn answer(bot: teloxide::Bot, msg: Message, cmd: Command, connector: Arc<Connector>) {
     match cmd {
         Command::Make(prompt) => {
+            let id = msg.chat.id.to_string();
+
             log::info!(
-                "job:{} status:init user {} prompt {}",
-                msg.chat.id.to_string(),
+                "job:{} status:init by user {} prompt {}",
+                &id,
                 msg.chat.username().unwrap_or("unknown"),
                 prompt
             );
@@ -67,17 +69,30 @@ async fn answer(bot: teloxide::Bot, msg: Message, cmd: Command, connector: Arc<C
 
             match connector.request(input, msg.chat.id.to_string()).await {
                 Ok(response) => {
-                    match bot
-                        .send_message(msg.chat.id.to_string(), format!("{:?}", response))
-                        .await
-                    {
-                        Ok(_) => log::info!("job:{} status:completed", msg.chat.id.to_string()),
-                        Err(e) => log::error!(
-                            "job:{} status:error on delivery {}",
-                            msg.chat.id.to_string(),
-                            e
-                        ),
-                    };
+                    let imgs: Vec<String> = response.imgs().into_iter().flatten().collect();
+
+                    for img in imgs {
+                        match url::Url::parse(&img) {
+                            Ok(img) => {
+                                match bot
+                                    .send_photo(msg.chat.id.to_string(), InputFile::url(img))
+                                    .caption(response.caption())
+                                    .await
+                                {
+                                    Ok(_) => log::info!(
+                                        "job:{} status:completed",
+                                        msg.chat.id.to_string()
+                                    ),
+                                    Err(e) => {
+                                        log::error!("job:{} status:error on delivery {}", id, e,)
+                                    }
+                                };
+                            }
+                            Err(e) => {
+                                log::error!("job:{} status:error invalid output url {}", &id, e)
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     log::error!(

@@ -62,6 +62,16 @@ struct PredictionRequest {
     webhook_completed: Option<String>,
 }
 
+impl PredictionResponse {
+    pub fn caption(&self) -> String {
+        self.input.prompt.to_string()
+    }
+
+    pub fn imgs(&self) -> Option<Vec<String>> {
+        self.output.clone()
+    }
+}
+
 pub struct Connector {
     client: Client,
     notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,

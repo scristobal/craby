@@ -19,3 +19,4 @@ base64 = "0.13"
 serde_with = "2.0"
 warp = "0.3.3"
 uuid = "1.2"
+url = { version = "2", features = ["serde"] }
