@@ -1,0 +1,10 @@
+version: '3.7'
+
+services:
+  victor5:
+    container_name: craby
+    env_file: .env
+    build:
+      context: .
+    ports:
+      - 8080
