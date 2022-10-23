@@ -187,5 +187,9 @@ pub async fn start_server(
         .and(use_notifiers)
         .map(process_entry);
 
-    warp::serve(webhooks).run(([127, 0, 0, 1], 8080)).await;
+    let health = warp::get().and(warp::path!("/")).map(warp::reply);
+
+    let app = warp::any().and(webhooks.or(health));
+
+    warp::serve(app).run(([127, 0, 0, 1], 8080)).await;
 }
