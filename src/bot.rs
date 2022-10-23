@@ -6,7 +6,6 @@ use log;
 use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands, RequestError};
 
 use crate::connector::{Connector, Input};
-use crate::errors::Error;
 
 pub fn build_from_env() -> teloxide::Bot {
     match dotenv() {
