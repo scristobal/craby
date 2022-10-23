@@ -6,6 +6,7 @@ use log;
 use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands, RequestError};
 
 use crate::connector::{Connector, Input};
+use crate::errors::Error;
 
 pub fn build_from_env() -> teloxide::Bot {
     match dotenv() {
@@ -37,7 +38,7 @@ pub async fn run(bot: teloxide::Bot, connector: Connector) -> Result<(), Request
             let connector = Arc::clone(&connector);
 
             async move {
-                answer(bot, msg, cmd, connector).await;
+                answer(bot, msg, cmd, connector).await?;
                 Ok(())
             }
         },
@@ -48,7 +49,12 @@ pub async fn run(bot: teloxide::Bot, connector: Connector) -> Result<(), Request
     Ok(())
 }
 
-async fn answer(bot: teloxide::Bot, msg: Message, cmd: Command, connector: Arc<Connector>) {
+async fn answer(
+    bot: teloxide::Bot,
+    msg: Message,
+    cmd: Command,
+    connector: Arc<Connector>,
+) -> Result<(), RequestError> {
     match cmd {
         Command::Make(prompt) => {
             let id = msg.chat.id.to_string();
@@ -67,26 +73,16 @@ async fn answer(bot: teloxide::Bot, msg: Message, cmd: Command, connector: Arc<C
                 guidance_scale: None,
             };
 
-            match connector.request(input, msg.chat.id.to_string()).await {
+            match connector.request(input, &id).await {
                 Ok(response) => {
                     let imgs: Vec<String> = response.imgs().into_iter().flatten().collect();
 
                     for img in imgs {
                         match url::Url::parse(&img) {
                             Ok(img) => {
-                                match bot
-                                    .send_photo(msg.chat.id.to_string(), InputFile::url(img))
+                                bot.send_photo(id.to_string(), InputFile::url(img))
                                     .caption(response.caption())
-                                    .await
-                                {
-                                    Ok(_) => log::info!(
-                                        "job:{} status:completed",
-                                        msg.chat.id.to_string()
-                                    ),
-                                    Err(e) => {
-                                        log::error!("job:{} status:error on delivery {}", id, e,)
-                                    }
-                                };
+                                    .await?;
                             }
                             Err(e) => {
                                 log::error!("job:{} status:error invalid output url {}", &id, e)
@@ -95,13 +91,10 @@ async fn answer(bot: teloxide::Bot, msg: Message, cmd: Command, connector: Arc<C
                     }
                 }
                 Err(e) => {
-                    log::error!(
-                        "job:{} status:error on request {}",
-                        msg.chat.id.to_string(),
-                        e
-                    )
+                    log::error!("job:{} status:error on request {}", &id, e)
                 }
             }
         }
     }
+    Ok(())
 }

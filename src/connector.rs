@@ -97,7 +97,7 @@ impl Connector {
         }
     }
 
-    pub async fn request(&self, input: Input, id: String) -> Result<PredictionResponse, String> {
+    pub async fn request(&self, input: Input, id: &String) -> Result<PredictionResponse, String> {
         self.model_request(&input, &id)
             .await
             .map_err(|e| format!("job:{} status:error server error {}", id, e))?;
@@ -114,7 +114,7 @@ impl Connector {
 
         let predictions = &mut self.predictions.lock().await;
 
-        predictions.remove(&id).map(|p| p.clone()).ok_or(format!(
+        predictions.remove(id).map(|p| p.clone()).ok_or(format!(
             "job:{} status:error unable to find prediction result",
             &id
         ))
