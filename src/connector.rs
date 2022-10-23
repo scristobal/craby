@@ -176,7 +176,7 @@ pub async fn start_server(
                 }
             });
 
-            reqwest::StatusCode::OK
+            warp::http::StatusCode::OK
         };
 
     let webhooks = warp::post()
@@ -187,7 +187,7 @@ pub async fn start_server(
         .and(use_notifiers)
         .map(process_entry);
 
-    let health = warp::get().and(warp::path!("/")).map(warp::reply);
+    let health = warp::get().map(warp::reply);
 
     let app = warp::any().and(webhooks.or(health));
 
