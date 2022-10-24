@@ -6,4 +6,6 @@ WORKDIR /app/src
 COPY ./ ./
 RUN cargo build --release
 
-CMD ["./target/release/craby"]
+RUN cp ./target/release/craby /usr/local/bin/
+
+CMD ["craby"]
