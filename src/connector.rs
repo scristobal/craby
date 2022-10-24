@@ -131,7 +131,7 @@ impl Connector {
         let body = PredictionRequest {
             version: MODEL_VERSION.to_string(),
             input: input.clone(),
-            webhook_completed: Some(format!("{}/webhook/{}", webhook, id)),
+            webhook_completed: Some(format!("{}webhook/{}", webhook, id)),
         };
 
         let body = serde_json::to_string(&body).unwrap();
