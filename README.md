@@ -19,3 +19,4 @@ Run with `RUST_LOG=debug cargo run`
 ## To Do's
 
 - [ ] Improve error handling, maybe use `thiserror`?
+- [ ] Support for other models

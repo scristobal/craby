@@ -10,8 +10,11 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
+use teloxide::repl;
 use tokio::sync::{Mutex, Notify};
 use warp::Filter;
+
+use crate::models::replicate_api;
 
 const MODEL_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef";
 
@@ -75,7 +78,7 @@ impl PredictionResponse {
 pub struct Connector {
     client: Client,
     notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
-    predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
+    predictions: Arc<Mutex<HashMap<String, replicate_api::Response>>>,
 }
 
 impl Connector {
@@ -97,7 +100,11 @@ impl Connector {
         }
     }
 
-    pub async fn request(&self, input: Input, id: &String) -> Result<PredictionResponse, String> {
+    pub async fn request(
+        &self,
+        input: Input,
+        id: &String,
+    ) -> Result<replicate_api::Response, String> {
         self.model_request(&input, &id)
             .await
             .map_err(|e| format!("job:{} status:error server error {}", id, e))?;
@@ -150,7 +157,7 @@ impl Connector {
 }
 
 pub async fn start_server(
-    predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
+    predictions: Arc<Mutex<HashMap<String, replicate_api::Response>>>,
     notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
 ) {
     let use_predictions = warp::any().map(move || Arc::clone(&predictions));
@@ -158,8 +165,8 @@ pub async fn start_server(
 
     let process_entry =
         |id: String,
-         body: PredictionResponse,
-         predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
+         body: replicate_api::Response,
+         predictions: Arc<Mutex<HashMap<String, replicate_api::Response>>>,
          notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>| {
             log::debug!("job:{} status:processed from webhook", id);
 

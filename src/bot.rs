@@ -26,6 +26,7 @@ pub fn build_from_env() -> teloxide::Bot {
 enum Command {
     #[command(description = "Create an image using Stable Diffusion v1.4")]
     Make(String),
+    DalleMini(String),
 }
 
 pub async fn run(bot: teloxide::Bot, connector: Connector) -> Result<(), RequestError> {
@@ -54,17 +55,12 @@ async fn answer(
     cmd: Command,
     connector: Arc<Connector>,
 ) -> Result<(), RequestError> {
+    let id = msg.chat.id.to_string();
+
+    log::info!("job:{} status:init ", &id,);
+
     match cmd {
         Command::Make(prompt) => {
-            let id = msg.chat.id.to_string();
-
-            log::info!(
-                "job:{} status:init by user {} prompt {}",
-                &id,
-                msg.chat.username().unwrap_or("unknown"),
-                prompt
-            );
-
             let input = Input {
                 prompt,
                 num_inference_steps: None,
@@ -93,6 +89,9 @@ async fn answer(
                     log::error!("job:{} status:error on request {}", &id, e)
                 }
             }
+        }
+        Command::DalleMini(_) => {
+            bot.send_message(id, "not yet implemented").await?;
         }
     }
     Ok(())
