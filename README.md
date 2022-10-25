@@ -1,6 +1,6 @@
 # Craby
 
-Craby is a Telegram bot  written in Rust 🤖🦀 to generate images from text prompts.
+Craby is a Telegram bot  written in Rust 🤖🦀 that runs ML models hosted in replicate.com
 
 ## Environment
 
