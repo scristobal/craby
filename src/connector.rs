@@ -10,7 +10,6 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use teloxide::repl;
 use tokio::sync::{Mutex, Notify};
 use warp::Filter;
 
@@ -19,29 +18,6 @@ use crate::models::replicate_api;
 const MODEL_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef";
 
 const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct PredictionResponse {
-    completed_at: Option<String>,
-    created_at: Option<String>,
-    error: Option<String>,
-    hardware: String,
-    id: String,
-    pub input: Input,
-    logs: String,
-    metrics: Metrics,
-    output: Option<Vec<String>>,
-    started_at: Option<String>,
-    status: String,
-    urls: Urls,
-    version: String,
-    webhook_completed: Option<String>,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-struct Metrics {
-    predict_time: f32,
-}
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -52,27 +28,11 @@ pub struct Input {
     pub guidance_scale: Option<f32>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
-struct Urls {
-    get: String,
-    cancel: String,
-}
-
 #[derive(Serialize, Debug)]
 struct PredictionRequest {
     version: String,
     input: Input,
     webhook_completed: Option<String>,
-}
-
-impl PredictionResponse {
-    pub fn caption(&self) -> String {
-        self.input.prompt.to_string()
-    }
-
-    pub fn imgs(&self) -> Option<Vec<String>> {
-        self.output.clone()
-    }
 }
 
 pub struct Connector {

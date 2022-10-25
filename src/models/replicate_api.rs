@@ -40,11 +40,28 @@ pub struct PredictionRequest<I> {
     webhook_completed: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(untagged)]
 pub enum Request {
     StableDiffusion(StableDiffusionRequest),
 }
 
-#[derive(Clone)]
+#[derive(Deserialize, Clone)]
+#[serde(untagged)]
 pub enum Response {
     StableDiffusion(StableDiffusionResponse),
+}
+
+impl Response {
+    pub fn caption(&self) -> String {
+        match self {
+            Response::StableDiffusion(response) => response.caption(),
+        }
+    }
+
+    pub fn imgs(&self) -> Option<Vec<String>> {
+        match self {
+            Response::StableDiffusion(response) => response.output.clone(),
+        }
+    }
 }
