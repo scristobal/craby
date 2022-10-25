@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-use super::stable_diffusion::{StableDiffusionRequest, StableDiffusionResponse};
+use super::stable_diffusion::{
+    Input, StableDiffusionRequest, StableDiffusionResponse, MODEL_VERSION,
+};
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct PredictionResponse<I, O> {
@@ -44,6 +46,25 @@ pub struct PredictionRequest<I> {
 #[serde(untagged)]
 pub enum Request {
     StableDiffusion(StableDiffusionRequest),
+}
+
+impl Request {
+    pub fn new(id: &String, prompt: String) -> Request {
+        let webhook = std::env::var("WEBHOOK_URL")
+            .expect("env variable WEBHOOK_URL should be set to public address");
+
+        let input = Input {
+            prompt,
+            num_inference_steps: None,
+            seed: None,
+            guidance_scale: None,
+        };
+        Self::StableDiffusion(StableDiffusionRequest {
+            version: MODEL_VERSION.to_string(),
+            input: input,
+            webhook_completed: Some(format!("{}webhook/{}", webhook, id)),
+        })
+    }
 }
 
 #[derive(Deserialize, Clone)]

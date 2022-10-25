@@ -5,7 +5,7 @@ use dotenv::dotenv;
 use log;
 use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands, RequestError};
 
-use crate::connector::{Connector, Input};
+use crate::{connector::Connector, models::replicate_api};
 
 pub fn build_from_env() -> teloxide::Bot {
     match dotenv() {
@@ -61,14 +61,9 @@ async fn answer(
 
     match cmd {
         Command::Make(prompt) => {
-            let input = Input {
-                prompt,
-                num_inference_steps: None,
-                seed: None,
-                guidance_scale: None,
-            };
+            let request = replicate_api::Request::new(&id, prompt);
 
-            match connector.request(input, &id).await {
+            match connector.request(request, &id).await {
                 Ok(response) => {
                     let imgs: Vec<String> = response.imgs().into_iter().flatten().collect();
 

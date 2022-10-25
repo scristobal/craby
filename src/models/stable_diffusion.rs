@@ -16,9 +16,9 @@ pub struct Input {
 
 pub type Output = Option<Vec<String>>;
 
-pub type StableDiffusionResponse = replicate_api::PredictionResponse<Input, Output>;
-
 pub type StableDiffusionRequest = replicate_api::PredictionRequest<Input>;
+
+pub type StableDiffusionResponse = replicate_api::PredictionResponse<Input, Output>;
 
 impl StableDiffusionResponse {
     pub fn caption(&self) -> String {

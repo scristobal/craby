@@ -15,25 +15,7 @@ use warp::Filter;
 
 use crate::models::replicate_api;
 
-const MODEL_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef";
-
 const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
-
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Input {
-    pub prompt: String,
-    pub seed: Option<u32>,
-    pub num_inference_steps: Option<u32>,
-    pub guidance_scale: Option<f32>,
-}
-
-#[derive(Serialize, Debug)]
-struct PredictionRequest {
-    version: String,
-    input: Input,
-    webhook_completed: Option<String>,
-}
 
 pub struct Connector {
     client: Client,
@@ -62,10 +44,10 @@ impl Connector {
 
     pub async fn request(
         &self,
-        input: Input,
+        request: replicate_api::Request,
         id: &String,
     ) -> Result<replicate_api::Response, String> {
-        self.model_request(&input, &id)
+        self.model_request(&request, &id)
             .await
             .map_err(|e| format!("job:{} status:error server error {}", id, e))?;
 
@@ -89,19 +71,13 @@ impl Connector {
 
     async fn model_request(
         &self,
-        input: &Input,
+        request: &replicate_api::Request,
         id: &String,
     ) -> Result<reqwest::Response, reqwest::Error> {
         let webhook = std::env::var("WEBHOOK_URL")
             .expect("env variable WEBHOOK_URL should be set to public address");
 
-        let body = PredictionRequest {
-            version: MODEL_VERSION.to_string(),
-            input: input.clone(),
-            webhook_completed: Some(format!("{}webhook/{}", webhook, id)),
-        };
-
-        let body = serde_json::to_string(&body).unwrap();
+        let body = serde_json::to_string(&request).unwrap();
 
         let token = std::env::var("R8_TOKEN")
             .expect("en variable R8_TOKEN should be set to a valid replicate.com token");
