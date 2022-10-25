@@ -1,6 +1,10 @@
 # Craby
 
-Craby is a Telegram bot  written in Rust 🤖🦀 that runs ML models hosted in replicate.com
+Craby is a Telegram bot  written in Rust 🤖🦀 that runs ML models hosted in replicate.com 
+
+Currently, only Stable Diffusion v1.4 is supported. 
+
+Give it a try https://t.me/test_botatoide_bot
 
 ## Environment
 
@@ -16,6 +20,7 @@ Requires `TELOXIDE_TOKEN`, `R8_TOKEN` and `PUBLIC_URL` set on the environment or
 
 Run with `RUST_LOG=debug cargo run`
 
-## To Do's
+## Roadmap
 
+- [ ] Support for multiple models
 - [ ] Improve error handling, maybe use `thiserror`?
