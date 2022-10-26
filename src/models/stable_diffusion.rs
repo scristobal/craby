@@ -21,6 +21,9 @@ pub type StableDiffusionRequest = replicate_api::PredictionRequest<Input>;
 pub type StableDiffusionResponse = replicate_api::PredictionResponse<Input, Output>;
 
 impl StableDiffusionResponse {
+    pub fn error(&self) -> Option<String> {
+        self.error.clone()
+    }
     pub fn caption(&self) -> String {
         self.input.prompt.to_string()
     }

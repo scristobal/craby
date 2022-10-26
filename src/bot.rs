@@ -64,22 +64,28 @@ async fn answer(
             let request = replicate_api::Request::new(&id, prompt);
 
             match connector.request(request, &id).await {
-                Ok(response) => {
-                    let imgs: Vec<String> = response.imgs().into_iter().flatten().collect();
+                Ok(response) => match response.error() {
+                    None => {
+                        let imgs: Vec<String> = response.imgs().into_iter().flatten().collect();
 
-                    for img in imgs {
-                        match url::Url::parse(&img) {
-                            Ok(img) => {
-                                bot.send_photo(id.to_string(), InputFile::url(img))
-                                    .caption(response.caption())
-                                    .await?;
-                            }
-                            Err(e) => {
-                                log::error!("job:{} status:error invalid output url {}", &id, e)
+                        for img in imgs {
+                            match url::Url::parse(&img) {
+                                Ok(img) => {
+                                    bot.send_photo(id.to_string(), InputFile::url(img))
+                                        .caption(response.caption())
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    log::error!("job:{} status:error invalid output url {}", &id, e)
+                                }
                             }
                         }
                     }
-                }
+                    Some(e) => {
+                        log::error!("job:{} status:error on response {}", &id, e);
+                        bot.send_message(id.to_string(), e).await?;
+                    }
+                },
                 Err(e) => {
                     log::error!("job:{} status:error on request {}", &id, e)
                 }

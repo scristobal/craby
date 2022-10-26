@@ -9,7 +9,7 @@ use super::stable_diffusion::{
 pub struct PredictionResponse<I, O> {
     completed_at: Option<String>,
     created_at: Option<String>,
-    error: Option<String>,
+    pub error: Option<String>,
     hardware: String,
     id: String,
     pub input: I,
@@ -61,7 +61,7 @@ impl Request {
         };
         Self::StableDiffusion(StableDiffusionRequest {
             version: MODEL_VERSION.to_string(),
-            input: input,
+            input,
             webhook_completed: Some(format!("{}webhook/{}", webhook, id)),
         })
     }
@@ -74,6 +74,11 @@ pub enum Response {
 }
 
 impl Response {
+    pub fn error(&self) -> Option<String> {
+        match self {
+            Response::StableDiffusion(response) => response.error(),
+        }
+    }
     pub fn caption(&self) -> String {
         match self {
             Response::StableDiffusion(response) => response.caption(),
