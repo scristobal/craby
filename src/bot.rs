@@ -5,7 +5,7 @@ use dotenv::dotenv;
 use log;
 use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands, RequestError};
 
-use crate::connector::{Connector, Input};
+use crate::{connector, models};
 
 pub fn build_from_env() -> teloxide::Bot {
     match dotenv() {
@@ -25,10 +25,11 @@ pub fn build_from_env() -> teloxide::Bot {
 )]
 enum Command {
     #[command(description = "Create an image using Stable Diffusion v1.4")]
-    Make(String),
+    StableD(String),
+    DalleM(String),
 }
 
-pub async fn run(bot: teloxide::Bot, connector: Connector) -> Result<(), RequestError> {
+pub async fn run(bot: teloxide::Bot, connector: connector::Connector) -> Result<(), RequestError> {
     let connector = Arc::new(connector);
 
     teloxide::commands_repl(
@@ -52,47 +53,42 @@ async fn answer(
     bot: teloxide::Bot,
     msg: Message,
     cmd: Command,
-    connector: Arc<Connector>,
+    connector: Arc<connector::Connector>,
 ) -> Result<(), RequestError> {
-    match cmd {
-        Command::Make(prompt) => {
-            let id = msg.chat.id.to_string();
+    let id = msg.chat.id.to_string();
 
-            log::info!(
-                "job:{} status:init by user {} prompt {}",
-                &id,
-                msg.chat.username().unwrap_or("unknown"),
-                prompt
-            );
+    log::info!("job:{} status:init ", &id,);
 
-            let input = Input {
-                prompt,
-                num_inference_steps: None,
-                seed: None,
-                guidance_scale: None,
-            };
+    let request = match cmd {
+        Command::StableD(prompt) => models::new_stable_diffusion(&id, prompt),
+        Command::DalleM(prompt) => models::new_dalle_mini(&id, prompt),
+    };
 
-            match connector.request(input, &id).await {
-                Ok(response) => {
-                    let imgs: Vec<String> = response.imgs().into_iter().flatten().collect();
+    match connector.request(request, &id).await {
+        Ok(response) => match response.error() {
+            None => {
+                let imgs: Vec<String> = response.imgs().into_iter().flatten().collect();
 
-                    for img in imgs {
-                        match url::Url::parse(&img) {
-                            Ok(img) => {
-                                bot.send_photo(id.to_string(), InputFile::url(img))
-                                    .caption(response.caption())
-                                    .await?;
-                            }
-                            Err(e) => {
-                                log::error!("job:{} status:error invalid output url {}", &id, e)
-                            }
+                for img in imgs {
+                    match url::Url::parse(&img) {
+                        Ok(img) => {
+                            bot.send_photo(id.to_string(), InputFile::url(img))
+                                .caption(response.caption())
+                                .await?;
+                        }
+                        Err(e) => {
+                            log::error!("job:{} status:error invalid output url {}", &id, e)
                         }
                     }
                 }
-                Err(e) => {
-                    log::error!("job:{} status:error on request {}", &id, e)
-                }
             }
+            Some(e) => {
+                log::error!("job:{} status:error on response {}", &id, e);
+                bot.send_message(id.to_string(), e).await?;
+            }
+        },
+        Err(e) => {
+            log::error!("job:{} status:error on request {}", &id, e)
         }
     }
     Ok(())

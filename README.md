@@ -24,3 +24,4 @@ Run with `RUST_LOG=debug cargo run`
 
 - [ ] Support for multiple models
 - [ ] Improve error handling, maybe use `thiserror`?
+- [ ] Support for other models

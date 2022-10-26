@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::{collections::HashMap, sync::Arc};
 
 use log;
@@ -7,75 +6,16 @@ use reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Client,
 };
-use serde::{Deserialize, Serialize};
-use serde_with::skip_serializing_none;
 
 use tokio::sync::{Mutex, Notify};
 use warp::Filter;
 
-const MODEL_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef";
-
-const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct PredictionResponse {
-    completed_at: Option<String>,
-    created_at: Option<String>,
-    error: Option<String>,
-    hardware: String,
-    id: String,
-    pub input: Input,
-    logs: String,
-    metrics: Metrics,
-    output: Option<Vec<String>>,
-    started_at: Option<String>,
-    status: String,
-    urls: Urls,
-    version: String,
-    webhook_completed: Option<String>,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-struct Metrics {
-    predict_time: f32,
-}
-
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Input {
-    pub prompt: String,
-    pub seed: Option<u32>,
-    pub num_inference_steps: Option<u32>,
-    pub guidance_scale: Option<f32>,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-struct Urls {
-    get: String,
-    cancel: String,
-}
-
-#[derive(Serialize, Debug)]
-struct PredictionRequest {
-    version: String,
-    input: Input,
-    webhook_completed: Option<String>,
-}
-
-impl PredictionResponse {
-    pub fn caption(&self) -> String {
-        self.input.prompt.to_string()
-    }
-
-    pub fn imgs(&self) -> Option<Vec<String>> {
-        self.output.clone()
-    }
-}
+use crate::{models, replicate};
 
 pub struct Connector {
     client: Client,
     notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
-    predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
+    predictions: Arc<Mutex<HashMap<String, models::Response>>>,
 }
 
 impl Connector {
@@ -88,7 +28,7 @@ impl Connector {
         let predictions_server = Arc::clone(&predictions);
         let notifiers_server = Arc::clone(&notifiers);
 
-        tokio::spawn(async { start_server(predictions_server, notifiers_server).await });
+        tokio::spawn(async { start_webhook_server(predictions_server, notifiers_server).await });
 
         Connector {
             client,
@@ -97,8 +37,12 @@ impl Connector {
         }
     }
 
-    pub async fn request(&self, input: Input, id: &String) -> Result<PredictionResponse, String> {
-        self.model_request(&input, &id)
+    pub async fn request(
+        &self,
+        request: models::Request,
+        id: &String,
+    ) -> Result<models::Response, String> {
+        self.model_request(&request)
             .await
             .map_err(|e| format!("job:{} status:error server error {}", id, e))?;
 
@@ -122,25 +66,15 @@ impl Connector {
 
     async fn model_request(
         &self,
-        input: &Input,
-        id: &String,
+        request: &models::Request,
     ) -> Result<reqwest::Response, reqwest::Error> {
-        let webhook = std::env::var("WEBHOOK_URL")
-            .expect("env variable WEBHOOK_URL should be set to public address");
-
-        let body = PredictionRequest {
-            version: MODEL_VERSION.to_string(),
-            input: input.clone(),
-            webhook_completed: Some(format!("{}webhook/{}", webhook, id)),
-        };
-
-        let body = serde_json::to_string(&body).unwrap();
+        let body = serde_json::to_string(&request).unwrap();
 
         let token = std::env::var("R8_TOKEN")
             .expect("en variable R8_TOKEN should be set to a valid replicate.com token");
 
         self.client
-            .post(MODEL_URL.to_string())
+            .post(replicate::MODEL_URL.to_string())
             .header(CONTENT_TYPE, "application/json")
             .header(AUTHORIZATION, "Token ".to_string() + &token)
             .body(body)
@@ -149,8 +83,8 @@ impl Connector {
     }
 }
 
-pub async fn start_server(
-    predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
+pub async fn start_webhook_server(
+    predictions: Arc<Mutex<HashMap<String, models::Response>>>,
     notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
 ) {
     let use_predictions = warp::any().map(move || Arc::clone(&predictions));
@@ -158,8 +92,8 @@ pub async fn start_server(
 
     let process_entry =
         |id: String,
-         body: PredictionResponse,
-         predictions: Arc<Mutex<HashMap<String, PredictionResponse>>>,
+         body: models::Response,
+         predictions: Arc<Mutex<HashMap<String, models::Response>>>,
          notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>| {
             log::debug!("job:{} status:processed from webhook", id);
 
