@@ -25,8 +25,8 @@ pub fn build_from_env() -> teloxide::Bot {
 )]
 enum Command {
     #[command(description = "Create an image using Stable Diffusion v1.4")]
-    Make(String),
-    DalleMini(String),
+    StableD(String),
+    DalleM(String),
 }
 
 pub async fn run(bot: teloxide::Bot, connector: connector::Connector) -> Result<(), RequestError> {
@@ -60,8 +60,8 @@ async fn answer(
     log::info!("job:{} status:init ", &id,);
 
     let request = match cmd {
-        Command::Make(prompt) => models::new_stable_diffusion(&id, prompt),
-        Command::DalleMini(prompt) => models::new_stable_diffusion(&id, prompt),
+        Command::StableD(prompt) => models::new_stable_diffusion(&id, prompt),
+        Command::DalleM(prompt) => models::new_dalle_mini(&id, prompt),
     };
 
     match connector.request(request, &id).await {
