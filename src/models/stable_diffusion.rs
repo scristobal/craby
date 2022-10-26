@@ -1,9 +1,8 @@
-use crate::models::replicate_api;
+use crate::replicate;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
 pub const MODEL_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef";
-pub const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -14,13 +13,24 @@ pub struct Input {
     pub guidance_scale: Option<f32>,
 }
 
+impl Input {
+    pub fn new(prompt: String) -> Self {
+        Input {
+            prompt,
+            num_inference_steps: None,
+            seed: None,
+            guidance_scale: None,
+        }
+    }
+}
+
 pub type Output = Option<Vec<String>>;
 
-pub type StableDiffusionRequest = replicate_api::PredictionRequest<Input>;
+pub type Request = replicate::Request<Input>;
 
-pub type StableDiffusionResponse = replicate_api::PredictionResponse<Input, Output>;
+pub type Response = replicate::Response<Input, Output>;
 
-impl StableDiffusionResponse {
+impl Response {
     pub fn error(&self) -> Option<String> {
         self.error.clone()
     }

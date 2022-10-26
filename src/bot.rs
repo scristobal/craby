@@ -5,7 +5,7 @@ use dotenv::dotenv;
 use log;
 use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands, RequestError};
 
-use crate::{connector::Connector, models::replicate_api};
+use crate::{connector, models};
 
 pub fn build_from_env() -> teloxide::Bot {
     match dotenv() {
@@ -29,7 +29,7 @@ enum Command {
     DalleMini(String),
 }
 
-pub async fn run(bot: teloxide::Bot, connector: Connector) -> Result<(), RequestError> {
+pub async fn run(bot: teloxide::Bot, connector: connector::Connector) -> Result<(), RequestError> {
     let connector = Arc::new(connector);
 
     teloxide::commands_repl(
@@ -53,46 +53,42 @@ async fn answer(
     bot: teloxide::Bot,
     msg: Message,
     cmd: Command,
-    connector: Arc<Connector>,
+    connector: Arc<connector::Connector>,
 ) -> Result<(), RequestError> {
     let id = msg.chat.id.to_string();
 
     log::info!("job:{} status:init ", &id,);
 
-    match cmd {
-        Command::Make(prompt) => {
-            let request = replicate_api::Request::new(&id, prompt);
+    let request = match cmd {
+        Command::Make(prompt) => models::new_stable_diffusion(&id, prompt),
+        Command::DalleMini(prompt) => models::new_stable_diffusion(&id, prompt),
+    };
 
-            match connector.request(request, &id).await {
-                Ok(response) => match response.error() {
-                    None => {
-                        let imgs: Vec<String> = response.imgs().into_iter().flatten().collect();
+    match connector.request(request, &id).await {
+        Ok(response) => match response.error() {
+            None => {
+                let imgs: Vec<String> = response.imgs().into_iter().flatten().collect();
 
-                        for img in imgs {
-                            match url::Url::parse(&img) {
-                                Ok(img) => {
-                                    bot.send_photo(id.to_string(), InputFile::url(img))
-                                        .caption(response.caption())
-                                        .await?;
-                                }
-                                Err(e) => {
-                                    log::error!("job:{} status:error invalid output url {}", &id, e)
-                                }
-                            }
+                for img in imgs {
+                    match url::Url::parse(&img) {
+                        Ok(img) => {
+                            bot.send_photo(id.to_string(), InputFile::url(img))
+                                .caption(response.caption())
+                                .await?;
+                        }
+                        Err(e) => {
+                            log::error!("job:{} status:error invalid output url {}", &id, e)
                         }
                     }
-                    Some(e) => {
-                        log::error!("job:{} status:error on response {}", &id, e);
-                        bot.send_message(id.to_string(), e).await?;
-                    }
-                },
-                Err(e) => {
-                    log::error!("job:{} status:error on request {}", &id, e)
                 }
             }
-        }
-        Command::DalleMini(_) => {
-            bot.send_message(id, "not yet implemented").await?;
+            Some(e) => {
+                log::error!("job:{} status:error on response {}", &id, e);
+                bot.send_message(id.to_string(), e).await?;
+            }
+        },
+        Err(e) => {
+            log::error!("job:{} status:error on request {}", &id, e)
         }
     }
     Ok(())

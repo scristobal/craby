@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::{collections::HashMap, sync::Arc};
 
 use log;
@@ -7,20 +6,16 @@ use reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Client,
 };
-use serde::{Deserialize, Serialize};
-use serde_with::skip_serializing_none;
 
 use tokio::sync::{Mutex, Notify};
 use warp::Filter;
 
-use crate::models::replicate_api;
-
-const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
+use crate::{models, replicate};
 
 pub struct Connector {
     client: Client,
     notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
-    predictions: Arc<Mutex<HashMap<String, replicate_api::Response>>>,
+    predictions: Arc<Mutex<HashMap<String, models::Response>>>,
 }
 
 impl Connector {
@@ -33,7 +28,7 @@ impl Connector {
         let predictions_server = Arc::clone(&predictions);
         let notifiers_server = Arc::clone(&notifiers);
 
-        tokio::spawn(async { start_server(predictions_server, notifiers_server).await });
+        tokio::spawn(async { start_webhook_server(predictions_server, notifiers_server).await });
 
         Connector {
             client,
@@ -44,10 +39,10 @@ impl Connector {
 
     pub async fn request(
         &self,
-        request: replicate_api::Request,
+        request: models::Request,
         id: &String,
-    ) -> Result<replicate_api::Response, String> {
-        self.model_request(&request, &id)
+    ) -> Result<models::Response, String> {
+        self.model_request(&request)
             .await
             .map_err(|e| format!("job:{} status:error server error {}", id, e))?;
 
@@ -71,19 +66,15 @@ impl Connector {
 
     async fn model_request(
         &self,
-        request: &replicate_api::Request,
-        id: &String,
+        request: &models::Request,
     ) -> Result<reqwest::Response, reqwest::Error> {
-        let webhook = std::env::var("WEBHOOK_URL")
-            .expect("env variable WEBHOOK_URL should be set to public address");
-
         let body = serde_json::to_string(&request).unwrap();
 
         let token = std::env::var("R8_TOKEN")
             .expect("en variable R8_TOKEN should be set to a valid replicate.com token");
 
         self.client
-            .post(MODEL_URL.to_string())
+            .post(replicate::MODEL_URL.to_string())
             .header(CONTENT_TYPE, "application/json")
             .header(AUTHORIZATION, "Token ".to_string() + &token)
             .body(body)
@@ -92,8 +83,8 @@ impl Connector {
     }
 }
 
-pub async fn start_server(
-    predictions: Arc<Mutex<HashMap<String, replicate_api::Response>>>,
+pub async fn start_webhook_server(
+    predictions: Arc<Mutex<HashMap<String, models::Response>>>,
     notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
 ) {
     let use_predictions = warp::any().map(move || Arc::clone(&predictions));
@@ -101,8 +92,8 @@ pub async fn start_server(
 
     let process_entry =
         |id: String,
-         body: replicate_api::Response,
-         predictions: Arc<Mutex<HashMap<String, replicate_api::Response>>>,
+         body: models::Response,
+         predictions: Arc<Mutex<HashMap<String, models::Response>>>,
          notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>| {
             log::debug!("job:{} status:processed from webhook", id);
 
