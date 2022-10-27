@@ -7,33 +7,31 @@ use reqwest::{
     Client,
 };
 
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::{oneshot, Mutex};
 use warp::Filter;
 
 use crate::{models, replicate};
 
+type ResultsChannel = oneshot::Sender<models::Response>;
+
 pub struct Connector {
     client: Client,
-    notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
-    predictions: Arc<Mutex<HashMap<String, models::Response>>>,
+    results_channel_map: Arc<Mutex<HashMap<String, ResultsChannel>>>,
 }
 
 impl Connector {
     pub fn new() -> Self {
         let client = Client::new();
 
-        let predictions = Arc::new(Mutex::new(HashMap::new()));
-        let notifiers = Arc::new(Mutex::new(HashMap::new()));
+        let results_channel_map = Arc::new(Mutex::new(HashMap::<String, ResultsChannel>::new()));
 
-        let predictions_server = Arc::clone(&predictions);
-        let notifiers_server = Arc::clone(&notifiers);
+        let tx_map_clone = Arc::clone(&results_channel_map);
 
-        tokio::spawn(async { start_webhook_server(predictions_server, notifiers_server).await });
+        tokio::spawn(async { start_webhook_server(tx_map_clone).await });
 
         Connector {
             client,
-            notifiers,
-            predictions,
+            results_channel_map,
         }
     }
 
@@ -46,22 +44,15 @@ impl Connector {
             .await
             .map_err(|e| format!("job:{} status:error server error {}", id, e))?;
 
-        let notifier = Arc::new(Notify::new());
+        let (tx, rx) = oneshot::channel::<models::Response>();
 
         {
-            let notifiers = &mut self.notifiers.lock().await;
-            notifiers.insert(id.clone(), Arc::clone(&notifier));
+            let tx_map = &mut self.results_channel_map.lock().await;
+            tx_map.insert(id.clone(), tx);
         }
 
-        notifier.notified().await;
-        log::debug!("job:{} status:notified", id);
-
-        let predictions = &mut self.predictions.lock().await;
-
-        predictions.remove(id).map(|p| p.clone()).ok_or(format!(
-            "job:{} status:error unable to find prediction result",
-            &id
-        ))
+        rx.await
+            .map_err(|e| format!("job:{} status:error on notification {}", &id, e))
     }
 
     async fn model_request(
@@ -84,29 +75,30 @@ impl Connector {
 }
 
 pub async fn start_webhook_server(
-    predictions: Arc<Mutex<HashMap<String, models::Response>>>,
-    notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
+    results_channel_map: Arc<Mutex<HashMap<String, ResultsChannel>>>,
 ) {
-    let use_predictions = warp::any().map(move || Arc::clone(&predictions));
-    let use_notifiers = warp::any().map(move || Arc::clone(&notifiers));
+    let use_tx_map = warp::any().map(move || Arc::clone(&results_channel_map));
 
     let process_entry =
         |id: String,
          body: models::Response,
-         predictions: Arc<Mutex<HashMap<String, models::Response>>>,
-         notifiers: Arc<Mutex<HashMap<String, Arc<Notify>>>>| {
+         tx_map: Arc<Mutex<HashMap<String, ResultsChannel>>>| {
             log::debug!("job:{} status:processed from webhook", id);
 
             tokio::spawn(async move {
-                let predictions = &mut predictions.lock().await;
-                predictions.insert(id.clone(), body);
+                let tx_map = &mut tx_map.lock().await;
+                let tx = tx_map.remove(&id);
 
-                let notifiers = &mut notifiers.lock().await;
-                let notifier = notifiers.remove(&id);
-
-                match notifier {
-                    Some(notifier) => notifier.notify_one(),
-                    None => log::error!("job:{} status:error there is no notifier registered", id),
+                match tx {
+                    Some(tx) => match tx.send(body) {
+                        Ok(_) => return,
+                        Err(_) => {
+                            log::error!("job:{} status:error on send result", id);
+                        }
+                    },
+                    None => {
+                        log::error!("job:{} status:error there is no notifier registered", id);
+                    }
                 }
             });
 
@@ -117,8 +109,7 @@ pub async fn start_webhook_server(
         .and(warp::path!("webhook" / String))
         .and(warp::body::content_length_limit(1024 * 16))
         .and(warp::body::json())
-        .and(use_predictions)
-        .and(use_notifiers)
+        .and(use_tx_map)
         .map(process_entry);
 
     let health = warp::get()

@@ -24,8 +24,9 @@ pub fn build_from_env() -> teloxide::Bot {
     description = "These commands are supported:"
 )]
 enum Command {
-    #[command(description = "Create an image using Stable Diffusion v1.4")]
+    #[command(description = "Create an image from text using Stable Diffusion v1.4")]
     StableD(String),
+    #[command(description = "Create an image from text using Dalle Mini")]
     DalleM(String),
 }
 
