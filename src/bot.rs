@@ -1,18 +1,9 @@
-use std::sync::Arc;
-
-use dotenv::dotenv;
-
+use crate::connector;
 use log;
+use std::sync::Arc;
 use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands, RequestError};
 
-use crate::{connector, models};
-
 pub fn build_from_env() -> teloxide::Bot {
-    match dotenv() {
-        Ok(_) => log::info!("Loaded .env file"),
-        Err(_) => log::info!("No .env file found. Falling back to environment variables"),
-    }
-
     log::info!("Starting bot...");
 
     teloxide::Bot::from_env()
@@ -56,41 +47,82 @@ async fn answer(
     cmd: Command,
     connector: Arc<connector::Connector>,
 ) -> Result<(), RequestError> {
-    let id = msg.chat.id.to_string();
+    log::info!("new job from {}", msg.chat.username().unwrap_or("unknown"));
 
-    log::info!("job:{} status:init ", &id,);
+    match cmd {
+        Command::StableD(prompt) => {
+            let response = connector.new_stable_diffusion(prompt).await;
 
-    let request = match cmd {
-        Command::StableD(prompt) => models::new_stable_diffusion(&id, prompt),
-        Command::DalleM(prompt) => models::new_dalle_mini(&id, prompt),
-    };
+            match response {
+                Ok(response) => match response.error {
+                    None => {
+                        let imgs: &Vec<String> = &response.output.into_iter().flatten().collect();
 
-    match connector.request(request, &id).await {
-        Ok(response) => match response.error() {
-            None => {
-                let imgs: Vec<String> = response.imgs().into_iter().flatten().collect();
-
-                for img in imgs {
-                    match url::Url::parse(&img) {
-                        Ok(img) => {
-                            bot.send_photo(id.to_string(), InputFile::url(img))
-                                .caption(response.caption())
-                                .await?;
-                        }
-                        Err(e) => {
-                            log::error!("job:{} status:error invalid output url {}", &id, e)
+                        for img in imgs {
+                            match url::Url::parse(&img) {
+                                Ok(img) => {
+                                    bot.send_photo(msg.chat.id.to_string(), InputFile::url(img))
+                                        .caption(response.input.prompt.to_string())
+                                        .await?;
+                                }
+                                Err(e) => {
+                                    log::error!("error invalid output url: {}", e)
+                                }
+                            }
                         }
                     }
+                    Some(e) => {
+                        log::error!("remote api error: {}", e);
+                        bot.send_message(msg.chat.id.to_string(), e).await?;
+                    }
+                },
+                Err(e) => {
+                    log::error!("connector error: {}", e)
+                }
+            };
+        }
+        Command::DalleM(prompt) => {
+            let response = connector.new_dalle_mini(prompt).await;
+
+            match response {
+                Ok(response) => match response.error {
+                    None => {
+                        let img = response.output;
+
+                        match img {
+                            Some(img) => {
+                                let img = img.last();
+                                match img {
+                                    Some(img) => match url::Url::parse(&img) {
+                                        Ok(img) => {
+                                            bot.send_photo(
+                                                msg.chat.id.to_string(),
+                                                InputFile::url(img),
+                                            )
+                                            .caption(response.input.text.to_string())
+                                            .await?;
+                                        }
+                                        Err(e) => {
+                                            log::error!("error invalid output url: {}", e)
+                                        }
+                                    },
+                                    _ => {}
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    Some(e) => {
+                        log::error!("remote api error: {}", e);
+                        bot.send_message(msg.chat.id.to_string(), e).await?;
+                    }
+                },
+                Err(e) => {
+                    log::error!("connector error: {}", e)
                 }
             }
-            Some(e) => {
-                log::error!("job:{} status:error on response {}", &id, e);
-                bot.send_message(id.to_string(), e).await?;
-            }
-        },
-        Err(e) => {
-            log::error!("job:{} status:error on request {}", &id, e)
         }
-    }
+    };
+
     Ok(())
 }

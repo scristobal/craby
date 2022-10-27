@@ -13,32 +13,7 @@ pub struct Input {
     pub guidance_scale: Option<f32>,
 }
 
-impl Input {
-    pub fn new(prompt: String) -> Self {
-        Input {
-            prompt,
-            num_inference_steps: None,
-            seed: None,
-            guidance_scale: None,
-        }
-    }
-}
-
 pub type Output = Option<Vec<String>>;
 
 pub type Request = base::Request<Input>;
-
 pub type Response = base::Response<Input, Output>;
-
-impl Response {
-    pub fn error(&self) -> Option<String> {
-        self.error.clone()
-    }
-    pub fn caption(&self) -> String {
-        self.input.prompt.to_string()
-    }
-
-    pub fn imgs(&self) -> Option<Vec<String>> {
-        self.output.clone()
-    }
-}

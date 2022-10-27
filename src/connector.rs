@@ -1,28 +1,33 @@
-use std::{collections::HashMap, sync::Arc};
+mod api;
+mod base;
+mod dalle_mini;
+mod stable_diffusion;
 
 use log;
-
 use reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Client,
 };
-
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{oneshot, Mutex};
+use uuid::Uuid;
 use warp::Filter;
-
-use crate::models;
 
 const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
 
-type ResultsChannel = oneshot::Sender<models::Response>;
+type ResultsChannel = oneshot::Sender<api::Response>;
 
 pub struct Connector {
     client: Client,
+    webhook_url: String,
     results_channel_map: Arc<Mutex<HashMap<String, ResultsChannel>>>,
 }
 
 impl Connector {
     pub fn new() -> Self {
+        let webhook = std::env::var("WEBHOOK_URL")
+            .expect("env variable WEBHOOK_URL should be set to public address");
+
         let client = Client::new();
 
         let results_channel_map = Arc::new(Mutex::new(HashMap::<String, ResultsChannel>::new()));
@@ -34,19 +39,70 @@ impl Connector {
         Connector {
             client,
             results_channel_map,
+            webhook_url: webhook,
+        }
+    }
+
+    pub async fn new_stable_diffusion(
+        &self,
+        prompt: String,
+    ) -> Result<stable_diffusion::Response, String> {
+        let input = stable_diffusion::Input {
+            prompt,
+            num_inference_steps: None,
+            seed: None,
+            guidance_scale: None,
+        };
+
+        let id = Uuid::new_v4();
+
+        let request = api::Request::StableDiffusion(stable_diffusion::Request {
+            version: stable_diffusion::MODEL_VERSION.to_string(),
+            input,
+            webhook_completed: Some(format!("{}webhook/{}", &self.webhook_url, &id)),
+        });
+
+        let response = self.request(request, id.to_string()).await?;
+
+        match response {
+            api::Response::StableDiffusion(response) => Ok(response),
+            _ => Err("error wrong response from server".to_string()),
+        }
+    }
+
+    pub async fn new_dalle_mini(&self, prompt: String) -> Result<dalle_mini::Response, String> {
+        let input = dalle_mini::Input {
+            text: prompt,
+            seed: None,
+            grid_size: Some(3),
+        };
+
+        let id = Uuid::new_v4();
+
+        let request = api::Request::DalleMini(dalle_mini::Request {
+            version: dalle_mini::MODEL_VERSION.to_string(),
+            input,
+            webhook_completed: Some(format!("{}webhook/{}", self.webhook_url, &id)),
+        });
+
+        let response = self.request(request, id.to_string()).await?;
+
+        match response {
+            api::Response::DalleMini(response) => Ok(response),
+            _ => Err("error wrong response from server".to_string()),
         }
     }
 
     pub async fn request(
         &self,
-        request: models::Request,
-        id: &String,
-    ) -> Result<models::Response, String> {
+        request: api::Request,
+        id: String,
+    ) -> Result<api::Response, String> {
         self.model_request(&request)
             .await
-            .map_err(|e| format!("job:{} status:error server error {}", id, e))?;
+            .map_err(|e| format!("model request error: {}", e))?;
 
-        let (tx, rx) = oneshot::channel::<models::Response>();
+        let (tx, rx) = oneshot::channel::<api::Response>();
 
         {
             let tx_map = &mut self.results_channel_map.lock().await;
@@ -54,12 +110,12 @@ impl Connector {
         }
 
         rx.await
-            .map_err(|e| format!("job:{} status:error on notification {}", &id, e))
+            .map_err(|e| format!("oneshot channel error: {}", e))
     }
 
     async fn model_request(
         &self,
-        request: &models::Request,
+        request: &api::Request,
     ) -> Result<reqwest::Response, reqwest::Error> {
         let body = serde_json::to_string(&request).unwrap();
 
@@ -82,9 +138,7 @@ pub async fn start_webhook_server(
     let use_tx_map = warp::any().map(move || Arc::clone(&results_channel_map));
 
     let process_entry =
-        |id: String,
-         body: models::Response,
-         tx_map: Arc<Mutex<HashMap<String, ResultsChannel>>>| {
+        |id: String, body: api::Response, tx_map: Arc<Mutex<HashMap<String, ResultsChannel>>>| {
             log::debug!("job:{} status:processed from webhook", id);
 
             tokio::spawn(async move {
