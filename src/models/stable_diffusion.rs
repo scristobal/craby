@@ -1,4 +1,4 @@
-use crate::replicate;
+use super::base;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
@@ -26,9 +26,9 @@ impl Input {
 
 pub type Output = Option<Vec<String>>;
 
-pub type Request = replicate::Request<Input>;
+pub type Request = base::Request<Input>;
 
-pub type Response = replicate::Response<Input, Output>;
+pub type Response = base::Response<Input, Output>;
 
 impl Response {
     pub fn error(&self) -> Option<String> {

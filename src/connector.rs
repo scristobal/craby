@@ -10,7 +10,9 @@ use reqwest::{
 use tokio::sync::{oneshot, Mutex};
 use warp::Filter;
 
-use crate::{models, replicate};
+use crate::models;
+
+const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
 
 type ResultsChannel = oneshot::Sender<models::Response>;
 
@@ -65,7 +67,7 @@ impl Connector {
             .expect("en variable R8_TOKEN should be set to a valid replicate.com token");
 
         self.client
-            .post(replicate::MODEL_URL.to_string())
+            .post(MODEL_URL.to_string())
             .header(CONTENT_TYPE, "application/json")
             .header(AUTHORIZATION, "Token ".to_string() + &token)
             .body(body)

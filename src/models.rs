@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+mod base;
 mod dalle_mini;
 mod stable_diffusion;
 

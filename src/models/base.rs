@@ -2,7 +2,13 @@
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-pub const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
+#[skip_serializing_none]
+#[derive(Serialize, Debug)]
+pub struct Request<I> {
+    pub version: String,
+    pub input: I,
+    pub webhook_completed: Option<String>,
+}
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Response<I, O> {
@@ -31,12 +37,4 @@ struct Metrics {
 struct Urls {
     get: String,
     cancel: String,
-}
-
-#[skip_serializing_none]
-#[derive(Serialize, Debug)]
-pub struct Request<I> {
-    pub version: String,
-    pub input: I,
-    pub webhook_completed: Option<String>,
 }
