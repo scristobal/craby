@@ -1,4 +1,4 @@
-use craby::{bot, connector::Connector};
+use craby::{app, bot, connector::Connector};
 use dotenv::dotenv;
 use std::io::Result;
 
@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
 
     let bot = bot::build_from_env();
 
-    tokio::spawn(async { bot::run(bot, connector).await });
+    tokio::spawn(async { app::run(bot, connector).await });
 
     tokio::signal::ctrl_c().await
 }
