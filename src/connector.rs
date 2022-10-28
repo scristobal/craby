@@ -13,6 +13,8 @@ use tokio::sync::{oneshot, Mutex};
 use uuid::Uuid;
 use warp::Filter;
 
+use crate::errors::ConnectorError;
+
 const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
 
 type ResultsChannel = oneshot::Sender<api::Response>;
@@ -46,7 +48,7 @@ impl Connector {
     pub async fn new_stable_diffusion(
         &self,
         prompt: String,
-    ) -> Result<stable_diffusion::Response, String> {
+    ) -> Result<stable_diffusion::Response, ConnectorError> {
         let input = stable_diffusion::Input {
             prompt,
             num_inference_steps: None,
@@ -65,12 +67,22 @@ impl Connector {
         let response = self.request(request, id.to_string()).await?;
 
         match response {
-            api::Response::StableDiffusion(response) => Ok(response),
-            _ => Err("error wrong response from server".to_string()),
+            api::Response::StableDiffusion(response) => {
+                if let Some(error) = response.error {
+                    return Err(ConnectorError::ApiError(error));
+                }
+                Ok(response)
+            }
+            _ => Err(ConnectorError::ResponseDidNotMatchError(
+                "error wrong response from server".to_string(),
+            )),
         }
     }
 
-    pub async fn new_dalle_mini(&self, prompt: String) -> Result<dalle_mini::Response, String> {
+    pub async fn new_dalle_mini(
+        &self,
+        prompt: String,
+    ) -> Result<dalle_mini::Response, ConnectorError> {
         let input = dalle_mini::Input {
             text: prompt,
             seed: None,
@@ -88,8 +100,15 @@ impl Connector {
         let response = self.request(request, id.to_string()).await?;
 
         match response {
-            api::Response::DalleMini(response) => Ok(response),
-            _ => Err("error wrong response from server".to_string()),
+            api::Response::DalleMini(response) => {
+                if let Some(error) = response.error {
+                    return Err(ConnectorError::ApiError(error));
+                }
+                Ok(response)
+            }
+            _ => Err(ConnectorError::ResponseDidNotMatchError(
+                "error wrong response from server".to_string(),
+            )),
         }
     }
 
@@ -97,10 +116,8 @@ impl Connector {
         &self,
         request: api::Request,
         id: String,
-    ) -> Result<api::Response, String> {
-        self.model_request(&request)
-            .await
-            .map_err(|e| format!("model request error: {}", e))?;
+    ) -> Result<api::Response, ConnectorError> {
+        self.model_request(&request).await?;
 
         let (tx, rx) = oneshot::channel::<api::Response>();
 
@@ -109,8 +126,9 @@ impl Connector {
             tx_map.insert(id.clone(), tx);
         }
 
-        rx.await
-            .map_err(|e| format!("oneshot channel error: {}", e))
+        let res = rx.await?;
+
+        Ok(res)
     }
 
     async fn model_request(

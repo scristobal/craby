@@ -1,4 +1,4 @@
-use crate::{connector, errors::Error};
+use crate::{connector, errors::AnswerError};
 use log;
 use std::sync::Arc;
 
@@ -37,9 +37,10 @@ pub async fn answer_cmd_repl(
 
     match result {
         Err(e) => match e {
-            Error::BotRequest(e) => Err(e),
-            Error::ParseError(e) => Ok(log::error!("error parsing an url: {}", e)),
-            Error::ShouldNotBeNull(e) => Ok(log::error!("field should not be null: {}", e)),
+            AnswerError::BotRequest(e) => Err(e),
+            AnswerError::ParseError(e) => Ok(log::error!("error parsing an url: {}", e)),
+            AnswerError::ShouldNotBeNull(e) => Ok(log::error!("field should not be null: {}", e)),
+            AnswerError::ConnectorError(e) => Ok(log::error!("connector error: {}", e)),
         },
         _ => Ok(()),
     }
@@ -50,34 +51,23 @@ async fn answer_dalle_mini(
     prompt: String,
     bot: &Bot,
     msg: &Message,
-) -> Result<(), Error> {
-    let response = connector.new_dalle_mini(prompt).await;
-    match response {
-        Ok(response) => match response.error {
-            None => {
-                let img = response
-                    .output
-                    .ok_or(Error::ShouldNotBeNull("output was null".to_string()))?;
+) -> Result<(), AnswerError> {
+    let response = connector.new_dalle_mini(prompt).await?;
 
-                let img = img.last().ok_or(Error::ShouldNotBeNull(
-                    "output image array was empty".to_string(),
-                ))?;
+    let img = response
+        .output
+        .ok_or(AnswerError::ShouldNotBeNull("output was null".to_string()))?;
 
-                let url = url::Url::parse(&img)?;
+    let img = img.last().ok_or(AnswerError::ShouldNotBeNull(
+        "output image array was empty".to_string(),
+    ))?;
 
-                bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))
-                    .caption(response.input.text.to_string())
-                    .await?;
-            }
-            Some(e) => {
-                log::error!("remote api error: {}", e);
-                bot.send_message(msg.chat.id.to_string(), e).await?;
-            }
-        },
-        Err(e) => {
-            log::error!("connector error: {}", e)
-        }
-    };
+    let url = url::Url::parse(&img)?;
+
+    bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))
+        .caption(response.input.text.to_string())
+        .await?;
+
     Ok(())
 }
 
@@ -86,34 +76,18 @@ async fn answer_stable_diffusion(
     prompt: String,
     bot: &Bot,
     msg: &Message,
-) -> Result<(), Error> {
-    let response = connector.new_stable_diffusion(prompt).await;
-    match response {
-        Ok(response) => match response.error {
-            None => {
-                let imgs: &Vec<String> = &response.output.into_iter().flatten().collect();
+) -> Result<(), AnswerError> {
+    let response = connector.new_stable_diffusion(prompt).await?;
 
-                for img in imgs {
-                    match url::Url::parse(&img) {
-                        Ok(img) => {
-                            bot.send_photo(msg.chat.id.to_string(), InputFile::url(img))
-                                .caption(response.input.prompt.to_string())
-                                .await?;
-                        }
-                        Err(e) => {
-                            log::error!("error invalid output url: {}", e)
-                        }
-                    }
-                }
-            }
-            Some(e) => {
-                log::error!("remote api error: {}", e);
-                bot.send_message(msg.chat.id.to_string(), e).await?;
-            }
-        },
-        Err(e) => {
-            log::error!("connector error: {}", e)
-        }
-    };
+    let imgs: &Vec<String> = &response.output.into_iter().flatten().collect();
+
+    for img in imgs {
+        let url = url::Url::parse(img)?;
+
+        bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))
+            .caption(response.input.prompt.to_string())
+            .await?;
+    }
+
     Ok(())
 }
