@@ -4,7 +4,7 @@ Craby is a Telegram bot  written in Rust 🤖🦀 that runs ML models hosted in 
 
 Currently, only Stable Diffusion v1.4 is supported. 
 
-Give it a try https://t.me/test_botatoide_bot it will answer to `/make a horse in space` 
+Give it a try https://t.me/test_botatoide_bot it will answer to `/stabled a horse in space` or `/dallem a horse in space`
 
 ## Environment
 
