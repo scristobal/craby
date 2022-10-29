@@ -3,7 +3,6 @@ mod base;
 mod dalle_mini;
 mod stable_diffusion;
 
-use log;
 use reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
     Client,
@@ -45,7 +44,7 @@ impl Connector {
         }
     }
 
-    pub async fn new_stable_diffusion(
+    pub async fn stable_diffusion(
         &self,
         prompt: String,
     ) -> Result<stable_diffusion::Response, ConnectorError> {
@@ -79,10 +78,7 @@ impl Connector {
         }
     }
 
-    pub async fn new_dalle_mini(
-        &self,
-        prompt: String,
-    ) -> Result<dalle_mini::Response, ConnectorError> {
+    pub async fn dalle_mini(&self, prompt: String) -> Result<dalle_mini::Response, ConnectorError> {
         let input = dalle_mini::Input {
             text: prompt,
             seed: None,
@@ -112,12 +108,12 @@ impl Connector {
         }
     }
 
-    pub async fn request(
+    async fn request(
         &self,
         request: api::Request,
         id: String,
     ) -> Result<api::Response, ConnectorError> {
-        self.model_request(&request).await?;
+        self.api_call(&request).await?;
 
         let (tx, rx) = oneshot::channel::<api::Response>();
 
@@ -131,10 +127,7 @@ impl Connector {
         Ok(res)
     }
 
-    async fn model_request(
-        &self,
-        request: &api::Request,
-    ) -> Result<reqwest::Response, reqwest::Error> {
+    async fn api_call(&self, request: &api::Request) -> Result<reqwest::Response, reqwest::Error> {
         let body = serde_json::to_string(&request).unwrap();
 
         let token = std::env::var("R8_TOKEN")
@@ -150,30 +143,16 @@ impl Connector {
     }
 }
 
-pub async fn start_webhook_server(
-    results_channel_map: Arc<Mutex<HashMap<String, ResultsChannel>>>,
-) {
+async fn start_webhook_server(results_channel_map: Arc<Mutex<HashMap<String, ResultsChannel>>>) {
     let use_tx_map = warp::any().map(move || Arc::clone(&results_channel_map));
 
     let process_entry =
         |id: String, body: api::Response, tx_map: Arc<Mutex<HashMap<String, ResultsChannel>>>| {
-            log::debug!("job:{} status:processed from webhook", id);
-
             tokio::spawn(async move {
                 let tx_map = &mut tx_map.lock().await;
                 let tx = tx_map.remove(&id);
 
-                match tx {
-                    Some(tx) => match tx.send(body) {
-                        Ok(_) => return,
-                        Err(_) => {
-                            log::error!("job:{} status:error on send result", id);
-                        }
-                    },
-                    None => {
-                        log::error!("job:{} status:error there is no notifier registered", id);
-                    }
-                }
+                tx.and_then(|tx| tx.send(body).ok());
             });
 
             warp::http::StatusCode::OK

@@ -4,12 +4,6 @@ use std::sync::Arc;
 
 use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands, RequestError};
 
-pub fn build_from_env() -> teloxide::Bot {
-    log::info!("Starting bot...");
-
-    teloxide::Bot::from_env()
-}
-
 #[derive(BotCommands, Clone)]
 #[command(
     rename_rule = "lowercase",
@@ -52,7 +46,7 @@ async fn answer_dalle_mini(
     bot: &Bot,
     msg: &Message,
 ) -> Result<(), AnswerError> {
-    let response = connector.new_dalle_mini(prompt).await?;
+    let response = connector.dalle_mini(prompt).await?;
 
     let img = response
         .output
@@ -77,7 +71,7 @@ async fn answer_stable_diffusion(
     bot: &Bot,
     msg: &Message,
 ) -> Result<(), AnswerError> {
-    let response = connector.new_stable_diffusion(prompt).await?;
+    let response = connector.stable_diffusion(prompt).await?;
 
     let imgs: &Vec<String> = &response.output.into_iter().flatten().collect();
 

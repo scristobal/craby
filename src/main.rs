@@ -13,7 +13,8 @@ async fn main() -> Result<()> {
 
     let connector = Connector::new();
 
-    let bot = bot::build_from_env();
+    log::info!("Starting bot...");
+    let bot = teloxide::Bot::from_env();
 
     tokio::spawn(async { app::run(bot, connector).await });
 
