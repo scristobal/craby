@@ -22,5 +22,5 @@ pub enum ConnectorError {
     #[error("internal channel error")]
     ChannelError(#[from] RecvError),
     #[error("the response did not match the request")]
-    ResponseDidNotMatchError(String),
+    ResponseDidNotMatchError,
 }

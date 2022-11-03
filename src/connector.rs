@@ -65,17 +65,15 @@ impl Connector {
 
         let response = self.request(request, id.to_string()).await?;
 
-        match response {
-            api::Response::StableDiffusion(response) => {
-                if let Some(error) = response.error {
-                    return Err(ConnectorError::ApiError(error));
-                }
-                Ok(response)
-            }
-            _ => Err(ConnectorError::ResponseDidNotMatchError(
-                "error wrong response from server".to_string(),
-            )),
+        let api::Response::StableDiffusion(response) = response else {
+            return Err(ConnectorError::ResponseDidNotMatchError);
+        };
+
+        if let Some(error) = response.error {
+            return Err(ConnectorError::ApiError(error));
         }
+
+        Ok(response)
     }
 
     pub async fn dalle_mini(&self, prompt: String) -> Result<dalle_mini::Response, ConnectorError> {
@@ -95,17 +93,15 @@ impl Connector {
 
         let response = self.request(request, id.to_string()).await?;
 
-        match response {
-            api::Response::DalleMini(response) => {
-                if let Some(error) = response.error {
-                    return Err(ConnectorError::ApiError(error));
-                }
-                Ok(response)
-            }
-            _ => Err(ConnectorError::ResponseDidNotMatchError(
-                "error wrong response from server".to_string(),
-            )),
+        let api::Response::DalleMini(response) = response else {
+            return Err(ConnectorError::ResponseDidNotMatchError)
+        };
+
+        if let Some(error) = response.error {
+            return Err(ConnectorError::ApiError(error));
         }
+
+        Ok(response)
     }
 
     async fn request(

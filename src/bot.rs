@@ -36,7 +36,7 @@ pub async fn answer_cmd_repl(
             AnswerError::ShouldNotBeNull(e) => Ok(log::error!("field should not be null: {}", e)),
             AnswerError::ConnectorError(e) => Ok(log::error!("connector error: {}", e)),
         },
-        _ => Ok(()),
+        Ok(()) => Ok(()),
     }
 }
 

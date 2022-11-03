@@ -1,4 +1,4 @@
-use craby::{app, bot, connector::Connector};
+use craby::{app, connector::Connector};
 use dotenv::dotenv;
 use std::io::Result;
 
