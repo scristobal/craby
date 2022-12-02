@@ -1,4 +1,4 @@
-FROM rust:1.64-bullseye as builder
+FROM rust:1.65-bullseye as builder
 ENV PATH "/root/.cargo/bin:${PATH}"
 
 WORKDIR /app/src
