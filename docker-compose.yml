@@ -2,6 +2,7 @@ version: '3.7'
 
 services:
   bot:
+    image: scristobal/craby:latest
     container_name: craby
     env_file: .env
     build:
