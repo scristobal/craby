@@ -15,7 +15,7 @@ pub struct Response<I, O> {
     completed_at: Option<String>,
     created_at: Option<String>,
     pub error: Option<String>,
-    hardware: String,
+    hardware: Option<String>,
     id: String,
     pub input: I,
     logs: String,

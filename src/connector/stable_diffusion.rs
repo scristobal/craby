@@ -2,7 +2,7 @@ use super::base;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 
-pub const MODEL_VERSION: &str = "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef";
+pub const MODEL_VERSION: &str = "f178fa7a1ae43a9a9af01b833b9d2ecf97b1bcb0acfd2dc5dd04895e042863f1";
 
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Debug, Clone)]
