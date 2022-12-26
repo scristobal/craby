@@ -1,59 +1,41 @@
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 
-#[derive(Serialize)]
-#[serde(untagged)]
-pub enum Request {
-    StableDiffusion(base::Request<stable_diffusion::Input>),
-    DalleMini(base::Request<dalle_mini::Input>),
+#[derive(Deserialize, Debug, Clone)]
+pub struct Response<Input, Output> {
+    completed_at: Option<String>,
+    created_at: Option<String>,
+    pub error: Option<String>,
+    hardware: Option<String>,
+    id: String,
+    pub input: Input,
+    logs: String,
+    metrics: Metrics,
+    pub output: Output,
+    started_at: Option<String>,
+    status: String,
+    urls: Urls,
+    version: String,
+    webhook_completed: Option<String>,
 }
 
-#[derive(Deserialize, Clone)]
-#[serde(untagged)]
-pub enum Response {
-    StableDiffusion(base::Response<stable_diffusion::Input, stable_diffusion::Output>),
-    DalleMini(base::Response<dalle_mini::Input, dalle_mini::Output>),
+#[derive(Deserialize, Debug, Clone)]
+struct Metrics {
+    predict_time: f32,
 }
 
-pub mod base {
-    use serde::{Deserialize, Serialize};
-    use serde_with::skip_serializing_none;
+#[derive(Deserialize, Debug, Clone)]
+struct Urls {
+    get: String,
+    cancel: String,
+}
 
-    #[derive(Deserialize, Debug, Clone)]
-    pub struct Response<Input, Output> {
-        completed_at: Option<String>,
-        created_at: Option<String>,
-        pub error: Option<String>,
-        hardware: Option<String>,
-        id: String,
-        pub input: Input,
-        logs: String,
-        metrics: Metrics,
-        pub output: Output,
-        started_at: Option<String>,
-        status: String,
-        urls: Urls,
-        version: String,
-        webhook_completed: Option<String>,
-    }
-
-    #[derive(Deserialize, Debug, Clone)]
-    struct Metrics {
-        predict_time: f32,
-    }
-
-    #[derive(Deserialize, Debug, Clone)]
-    struct Urls {
-        get: String,
-        cancel: String,
-    }
-
-    #[skip_serializing_none]
-    #[derive(Serialize, Debug)]
-    pub struct Request<I> {
-        pub version: String,
-        pub input: I,
-        pub webhook_completed: Option<String>,
-    }
+#[skip_serializing_none]
+#[derive(Serialize, Debug)]
+pub struct Request<I> {
+    pub version: String,
+    pub input: I,
+    pub webhook_completed: Option<String>,
 }
 
 pub mod dalle_mini {

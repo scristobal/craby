@@ -5,21 +5,19 @@ use reqwest::{
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{oneshot, Mutex};
 use uuid::Uuid;
-use warp::Filter;
+use warp::{hyper::body::Bytes, Filter};
 
 use crate::{
-    api::{self, base, dalle_mini, stable_diffusion},
+    api::{self, dalle_mini, stable_diffusion},
     errors::{AnswerError, ConnectorError},
 };
 
 const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
 
-type ResultsChannel = oneshot::Sender<api::Response>;
-
 pub struct Connector {
     client: Client,
     webhook_url: String,
-    results_channel_map: Arc<Mutex<HashMap<String, ResultsChannel>>>,
+    results_channel_map: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>,
 }
 
 impl Connector {
@@ -29,7 +27,8 @@ impl Connector {
 
         let client = Client::new();
 
-        let results_channel_map = Arc::new(Mutex::new(HashMap::<String, ResultsChannel>::new()));
+        let results_channel_map =
+            Arc::new(Mutex::new(HashMap::<String, oneshot::Sender<Bytes>>::new()));
 
         let tx_map_clone = Arc::clone(&results_channel_map);
 
@@ -52,19 +51,16 @@ impl Connector {
 
         let id = Uuid::new_v4();
 
-        type Request = base::Request<stable_diffusion::Input>;
+        type Request = api::Request<stable_diffusion::Input>;
+        type Response = api::Response<stable_diffusion::Input, stable_diffusion::Output>;
 
-        let request = api::Request::StableDiffusion(Request {
+        let request = Request {
             version: stable_diffusion::MODEL_VERSION.to_string(),
             input,
             webhook_completed: Some(format!("{}webhook/{}", &self.webhook_url, &id)),
-        });
-
-        let response = self.request(request, id.to_string()).await?;
-
-        let api::Response::StableDiffusion(response) = response else {
-            return Err(AnswerError::ConnectorError(ConnectorError::ResponseDidNotMatchError));
         };
+
+        let response: Response = self.request(request, id.to_string()).await?;
 
         if let Some(error) = response.error {
             return Err(AnswerError::ConnectorError(ConnectorError::ApiError(error)));
@@ -92,19 +88,16 @@ impl Connector {
 
         let id = Uuid::new_v4();
 
-        type Request = base::Request<dalle_mini::Input>;
+        type Request = api::Request<dalle_mini::Input>;
+        type Response = api::Response<dalle_mini::Input, dalle_mini::Output>;
 
-        let request = api::Request::DalleMini(Request {
+        let request = Request {
             version: dalle_mini::MODEL_VERSION.to_string(),
             input,
             webhook_completed: Some(format!("{}webhook/{}", self.webhook_url, &id)),
-        });
-
-        let response = self.request(request, id.to_string()).await?;
-
-        let api::Response::DalleMini(response) = response else {
-            return Err(AnswerError::ConnectorError(ConnectorError::ResponseDidNotMatchError))
         };
+
+        let response: Response = self.request(request, id.to_string()).await?;
 
         if let Some(error) = response.error {
             return Err(AnswerError::ConnectorError(ConnectorError::ApiError(error)));
@@ -123,14 +116,14 @@ impl Connector {
         Ok(url)
     }
 
-    async fn request(
+    async fn request<Request: serde::Serialize, Response: for<'a> serde::Deserialize<'a>>(
         &self,
-        request: api::Request,
+        request: Request,
         id: String,
-    ) -> Result<api::Response, ConnectorError> {
+    ) -> Result<Response, ConnectorError> {
         self.api_call(&request).await?;
 
-        let (tx, rx) = oneshot::channel::<api::Response>();
+        let (tx, rx) = oneshot::channel::<Bytes>();
 
         {
             let tx_map = &mut self.results_channel_map.lock().await;
@@ -139,10 +132,15 @@ impl Connector {
 
         let res = rx.await?;
 
+        let res = serde_json::from_slice::<Response>(&res).unwrap();
+
         Ok(res)
     }
 
-    async fn api_call(&self, request: &api::Request) -> Result<reqwest::Response, reqwest::Error> {
+    async fn api_call<Request: serde::Serialize>(
+        &self,
+        request: &Request,
+    ) -> Result<reqwest::Response, reqwest::Error> {
         let body = serde_json::to_string(&request).unwrap();
 
         let token = std::env::var("R8_TOKEN")
@@ -158,11 +156,13 @@ impl Connector {
     }
 }
 
-async fn start_webhook_server(results_channel_map: Arc<Mutex<HashMap<String, ResultsChannel>>>) {
+async fn start_webhook_server(
+    results_channel_map: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>,
+) {
     let use_tx_map = warp::any().map(move || Arc::clone(&results_channel_map));
 
     let process_entry =
-        |id: String, body: api::Response, tx_map: Arc<Mutex<HashMap<String, ResultsChannel>>>| {
+        |id: String, body: Bytes, tx_map: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>| {
             tokio::spawn(async move {
                 let tx_map = &mut tx_map.lock().await;
                 let tx = tx_map.remove(&id);
@@ -176,7 +176,7 @@ async fn start_webhook_server(results_channel_map: Arc<Mutex<HashMap<String, Res
     let webhooks = warp::post()
         .and(warp::path!("webhook" / String))
         .and(warp::body::content_length_limit(1024 * 16))
-        .and(warp::body::json())
+        .and(warp::body::bytes())
         .and(use_tx_map)
         .map(process_entry);
 
