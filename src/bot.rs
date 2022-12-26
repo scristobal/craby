@@ -24,9 +24,9 @@ pub async fn answer_cmd_repl(
 ) -> Result<(), RequestError> {
     log::info!("new job from {}", msg.chat.username().unwrap_or("unknown"));
 
-    let result = match cmd {
-        Command::StableD(prompt) => answer_stable_diffusion(&connector, prompt, &bot, &msg).await,
-        Command::DalleM(prompt) => answer_dalle_mini(&connector, prompt, &bot, &msg).await,
+    let (result, prompt) = match cmd {
+        Command::StableD(prompt) => (connector.stable_diffusion(prompt.clone()).await, prompt),
+        Command::DalleM(prompt) => (connector.dalle_mini(prompt.clone()).await, prompt),
     };
 
     match result {
@@ -36,36 +36,11 @@ pub async fn answer_cmd_repl(
             AnswerError::ShouldNotBeNull(e) => Ok(log::error!("field should not be null: {}", e)),
             AnswerError::ConnectorError(e) => Ok(log::error!("connector error: {}", e)),
         },
-        Ok(()) => Ok(()),
+        Ok(url) => {
+            bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))
+                .caption(prompt)
+                .await?;
+            Ok(())
+        }
     }
-}
-
-async fn answer_dalle_mini(
-    connector: &Arc<connector::Connector>,
-    prompt: String,
-    bot: &Bot,
-    msg: &Message,
-) -> Result<(), AnswerError> {
-    let url = connector.dalle_mini(prompt.clone()).await?;
-
-    bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))
-        .caption(prompt)
-        .await?;
-
-    Ok(())
-}
-
-async fn answer_stable_diffusion(
-    connector: &Arc<connector::Connector>,
-    prompt: String,
-    bot: &Bot,
-    msg: &Message,
-) -> Result<(), AnswerError> {
-    let url = connector.stable_diffusion(prompt.clone()).await?;
-
-    bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))
-        .caption(prompt)
-        .await?;
-
-    Ok(())
 }

@@ -7,7 +7,7 @@ use crate::{
     connector,
 };
 
-pub async fn run(bot: teloxide::Bot, connector: connector::Connector) -> Result<(), RequestError> {
+pub async fn run(bot: teloxide::Bot, connector: connector::Connector) {
     let connector = Arc::new(connector);
 
     teloxide::commands_repl(
@@ -15,14 +15,9 @@ pub async fn run(bot: teloxide::Bot, connector: connector::Connector) -> Result<
         move |bot: Bot, msg: Message, cmd: Command| {
             let connector = Arc::clone(&connector);
 
-            async move {
-                answer_cmd_repl(bot, msg, cmd, connector).await?;
-                Ok(())
-            }
+            async move { answer_cmd_repl(bot, msg, cmd, connector).await }
         },
         Command::ty(),
     )
     .await;
-
-    Ok(())
 }
