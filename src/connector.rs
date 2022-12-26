@@ -1,18 +1,16 @@
-mod api;
-mod base;
-mod dalle_mini;
-mod stable_diffusion;
-
 use reqwest::{
     header::{AUTHORIZATION, CONTENT_TYPE},
-    Client,
+    Client, Url,
 };
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{oneshot, Mutex};
 use uuid::Uuid;
 use warp::Filter;
 
-use crate::errors::ConnectorError;
+use crate::{
+    api::{self, base, dalle_mini, stable_diffusion},
+    errors::{AnswerError, ConnectorError},
+};
 
 const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
 
@@ -44,10 +42,7 @@ impl Connector {
         }
     }
 
-    pub async fn stable_diffusion(
-        &self,
-        prompt: String,
-    ) -> Result<stable_diffusion::Response, ConnectorError> {
+    pub async fn stable_diffusion(&self, prompt: String) -> Result<Url, AnswerError> {
         let input = stable_diffusion::Input {
             prompt,
             num_inference_steps: None,
@@ -57,7 +52,9 @@ impl Connector {
 
         let id = Uuid::new_v4();
 
-        let request = api::Request::StableDiffusion(stable_diffusion::Request {
+        type Request = base::Request<stable_diffusion::Input>;
+
+        let request = api::Request::StableDiffusion(Request {
             version: stable_diffusion::MODEL_VERSION.to_string(),
             input,
             webhook_completed: Some(format!("{}webhook/{}", &self.webhook_url, &id)),
@@ -66,17 +63,27 @@ impl Connector {
         let response = self.request(request, id.to_string()).await?;
 
         let api::Response::StableDiffusion(response) = response else {
-            return Err(ConnectorError::ResponseDidNotMatchError);
+            return Err(AnswerError::ConnectorError(ConnectorError::ResponseDidNotMatchError));
         };
 
         if let Some(error) = response.error {
-            return Err(ConnectorError::ApiError(error));
+            return Err(AnswerError::ConnectorError(ConnectorError::ApiError(error)));
         }
 
-        Ok(response)
+        let img = response
+            .output
+            .ok_or(AnswerError::ShouldNotBeNull("output was null".to_string()))?;
+
+        let img = img.last().ok_or(AnswerError::ShouldNotBeNull(
+            "output image array was empty".to_string(),
+        ))?;
+
+        let url = url::Url::parse(img)?;
+
+        Ok(url)
     }
 
-    pub async fn dalle_mini(&self, prompt: String) -> Result<dalle_mini::Response, ConnectorError> {
+    pub async fn dalle_mini(&self, prompt: String) -> Result<Url, AnswerError> {
         let input = dalle_mini::Input {
             text: prompt,
             seed: None,
@@ -85,7 +92,9 @@ impl Connector {
 
         let id = Uuid::new_v4();
 
-        let request = api::Request::DalleMini(dalle_mini::Request {
+        type Request = base::Request<dalle_mini::Input>;
+
+        let request = api::Request::DalleMini(Request {
             version: dalle_mini::MODEL_VERSION.to_string(),
             input,
             webhook_completed: Some(format!("{}webhook/{}", self.webhook_url, &id)),
@@ -94,14 +103,24 @@ impl Connector {
         let response = self.request(request, id.to_string()).await?;
 
         let api::Response::DalleMini(response) = response else {
-            return Err(ConnectorError::ResponseDidNotMatchError)
+            return Err(AnswerError::ConnectorError(ConnectorError::ResponseDidNotMatchError))
         };
 
         if let Some(error) = response.error {
-            return Err(ConnectorError::ApiError(error));
+            return Err(AnswerError::ConnectorError(ConnectorError::ApiError(error)));
         }
 
-        Ok(response)
+        let img = response
+            .output
+            .ok_or(AnswerError::ShouldNotBeNull("output was null".to_string()))?;
+
+        let img = img.last().ok_or(AnswerError::ShouldNotBeNull(
+            "output image array was empty".to_string(),
+        ))?;
+
+        let url = url::Url::parse(img)?;
+
+        Ok(url)
     }
 
     async fn request(

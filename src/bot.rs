@@ -46,20 +46,10 @@ async fn answer_dalle_mini(
     bot: &Bot,
     msg: &Message,
 ) -> Result<(), AnswerError> {
-    let response = connector.dalle_mini(prompt).await?;
-
-    let img = response
-        .output
-        .ok_or(AnswerError::ShouldNotBeNull("output was null".to_string()))?;
-
-    let img = img.last().ok_or(AnswerError::ShouldNotBeNull(
-        "output image array was empty".to_string(),
-    ))?;
-
-    let url = url::Url::parse(&img)?;
+    let url = connector.dalle_mini(prompt.clone()).await?;
 
     bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))
-        .caption(response.input.text.to_string())
+        .caption(prompt)
         .await?;
 
     Ok(())
@@ -71,17 +61,11 @@ async fn answer_stable_diffusion(
     bot: &Bot,
     msg: &Message,
 ) -> Result<(), AnswerError> {
-    let response = connector.stable_diffusion(prompt).await?;
+    let url = connector.stable_diffusion(prompt.clone()).await?;
 
-    let imgs: &Vec<String> = &response.output.into_iter().flatten().collect();
-
-    for img in imgs {
-        let url = url::Url::parse(img)?;
-
-        bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))
-            .caption(response.input.prompt.to_string())
-            .await?;
-    }
+    bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))
+        .caption(prompt)
+        .await?;
 
     Ok(())
 }
