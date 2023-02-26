@@ -14,8 +14,6 @@ pub enum Command {
     StableD(String),
     #[command(description = "Create an image from text using Dalle Mini")]
     DalleM(String),
-    #[command(description = "Model versions")]
-    Versions,
 }
 
 pub async fn answer_cmd_repl(
@@ -29,7 +27,6 @@ pub async fn answer_cmd_repl(
     let (result, prompt) = match cmd {
         Command::StableD(prompt) => (connector.stable_diffusion(prompt.clone()).await, prompt),
         Command::DalleM(prompt) => (connector.dalle_mini(prompt.clone()).await, prompt),
-        Command::Versions => (Err(AnswerError::NoRequest), "version".to_string()),
     };
 
     match result {
@@ -38,11 +35,6 @@ pub async fn answer_cmd_repl(
             AnswerError::UrlParse(e) => Ok(log::error!("error parsing an url: {}", e)),
             AnswerError::ShouldNotBeNull(e) => Ok(log::error!("field should not be null: {}", e)),
             AnswerError::ConnectorError(e) => Ok(log::error!("connector error: {}", e)),
-            AnswerError::NoRequest => {
-                bot.send_message(msg.chat.id.to_string(), stable_diffusion::MODEL_VERSION)
-                    .await;
-                Ok(())
-            }
         },
         Ok(url) => {
             bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use teloxide::{types::Message, utils::command::BotCommands, Bot, RequestError};
+use teloxide::{types::Message, utils::command::BotCommands, Bot};
 
 use crate::{
     bot::{answer_cmd_repl, Command},
