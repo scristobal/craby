@@ -63,7 +63,9 @@ impl Connector {
         let response: Response = self.request(request, id.to_string()).await?;
 
         if let Some(error) = response.error {
-            return Err(AnswerError::ConnectorError(ConnectorError::ApiError(error)));
+            return Err(AnswerError::ConnectorError(ConnectorError::ReplicateApi(
+                error,
+            )));
         }
 
         let img = response
@@ -100,7 +102,9 @@ impl Connector {
         let response: Response = self.request(request, id.to_string()).await?;
 
         if let Some(error) = response.error {
-            return Err(AnswerError::ConnectorError(ConnectorError::ApiError(error)));
+            return Err(AnswerError::ConnectorError(ConnectorError::ReplicateApi(
+                error,
+            )));
         }
 
         let img = response

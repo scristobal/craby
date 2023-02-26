@@ -6,7 +6,7 @@ pub enum AnswerError {
     #[error("bot unable to request")]
     BotRequest(#[from] teloxide::RequestError),
     #[error("could not parse a url")]
-    ParseError(#[from] url::ParseError),
+    UrlParse(#[from] url::ParseError),
     #[error("a field should not be empty, but it was")]
     ShouldNotBeNull(String),
     #[error("there was a problem processing the request")]
@@ -16,11 +16,11 @@ pub enum AnswerError {
 #[derive(Error, Debug)]
 pub enum ConnectorError {
     #[error("replicate api responded with error")]
-    ApiError(String),
+    ReplicateApi(String),
     #[error("http client error")]
-    ClientError(#[from] reqwest::Error),
+    HttpClient(#[from] reqwest::Error),
     #[error("internal channel error")]
-    ChannelError(#[from] RecvError),
+    InternalChannel(#[from] RecvError),
     #[error("the response did not match the request")]
-    ResponseDidNotMatchError,
+    ResponseDidNotMatch,
 }

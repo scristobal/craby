@@ -32,7 +32,7 @@ pub async fn answer_cmd_repl(
     match result {
         Err(e) => match e {
             AnswerError::BotRequest(e) => Err(e),
-            AnswerError::ParseError(e) => Ok(log::error!("error parsing an url: {}", e)),
+            AnswerError::UrlParse(e) => Ok(log::error!("error parsing an url: {}", e)),
             AnswerError::ShouldNotBeNull(e) => Ok(log::error!("field should not be null: {}", e)),
             AnswerError::ConnectorError(e) => Ok(log::error!("connector error: {}", e)),
         },
