@@ -61,7 +61,7 @@ pub mod stable_diffusion {
     use serde_with::skip_serializing_none;
 
     pub const MODEL_VERSION: &str =
-        "f178fa7a1ae43a9a9af01b833b9d2ecf97b1bcb0acfd2dc5dd04895e042863f1";
+        "328bd9692d29d6781034e3acab8cf3fcb122161e6f5afb896a4ca9fd57090577";
 
     #[skip_serializing_none]
     #[derive(Serialize, Deserialize, Debug, Clone)]
