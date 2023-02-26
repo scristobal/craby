@@ -11,6 +11,8 @@ pub enum AnswerError {
     ShouldNotBeNull(String),
     #[error("there was a problem processing the request")]
     ConnectorError(#[from] ConnectorError),
+    #[error("no request")]
+    NoRequest,
 }
 
 #[derive(Error, Debug)]
