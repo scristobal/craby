@@ -14,21 +14,24 @@ use crate::{
 
 const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
 
-pub struct Requests {
+pub struct ReplicateClient {
     client: Client,
+    token: String,
     webhook_url: String,
     tx_results: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>,
 }
 
-impl Requests {
+impl ReplicateClient {
     pub fn new(
         webhook_url: String,
+        token: String,
         tx_results: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>,
     ) -> Self {
         let client = Client::new();
 
-        Requests {
+        ReplicateClient {
             client,
+            token,
             tx_results,
             webhook_url,
         }
@@ -140,13 +143,10 @@ impl Requests {
     ) -> Result<reqwest::Response, reqwest::Error> {
         let body = serde_json::to_string(&request).unwrap();
 
-        let token = std::env::var("R8_TOKEN")
-            .expect("en variable R8_TOKEN should be set to a valid replicate.com token");
-
         self.client
             .post(MODEL_URL.to_string())
             .header(CONTENT_TYPE, "application/json")
-            .header(AUTHORIZATION, "Token ".to_string() + &token)
+            .header(AUTHORIZATION, "Token ".to_string() + &self.token)
             .body(body)
             .send()
             .await
