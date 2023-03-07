@@ -1,4 +1,4 @@
-use crate::{api::stable_diffusion, connector, errors::AnswerError};
+use crate::{errors::AnswerError, requests};
 use log;
 use std::sync::Arc;
 
@@ -20,7 +20,7 @@ pub async fn answer_cmd_repl(
     bot: teloxide::Bot,
     msg: Message,
     cmd: Command,
-    connector: Arc<connector::Connector>,
+    connector: Arc<requests::Requests>,
 ) -> Result<(), RequestError> {
     log::info!("new job from {}", msg.chat.username().unwrap_or("unknown"));
 

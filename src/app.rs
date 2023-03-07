@@ -4,10 +4,16 @@ use teloxide::{types::Message, utils::command::BotCommands, Bot};
 
 use crate::{
     bot::{answer_cmd_repl, Command},
-    connector,
+    requests, webhooks,
 };
 
-pub async fn run(bot: teloxide::Bot, connector: connector::Connector) {
+pub async fn run(
+    bot: teloxide::Bot,
+    connector: requests::Requests,
+    webhooks_server: webhooks::WebhookServer,
+) {
+    tokio::spawn(webhooks_server.run());
+
     let connector = Arc::new(connector);
 
     teloxide::commands_repl(
