@@ -35,6 +35,7 @@ pub async fn answer_cmd_repl(
             AnswerError::UrlParse(e) => Ok(log::error!("error parsing an url: {}", e)),
             AnswerError::ShouldNotBeNull(e) => Ok(log::error!("field should not be null: {}", e)),
             AnswerError::ConnectorError(e) => Ok(log::error!("connector error: {}", e)),
+            AnswerError::ParsingURL => Ok(log::error!("error parsing an url")),
         },
         Ok(url) => {
             bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))

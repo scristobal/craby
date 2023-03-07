@@ -17,13 +17,13 @@ const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
 pub struct ReplicateClient {
     client: Client,
     token: String,
-    webhook_url: String,
+    webhook_url: Url,
     tx_results: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>,
 }
 
 impl ReplicateClient {
     pub fn new(
-        webhook_url: String,
+        webhook_url: Url,
         token: String,
         tx_results: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>,
     ) -> Self {
@@ -50,10 +50,19 @@ impl ReplicateClient {
         type Request = api::Request<stable_diffusion::Input>;
         type Response = api::Response<stable_diffusion::Input, stable_diffusion::Output>;
 
+        let mut webhook_completed = self.webhook_url.clone();
+
+        webhook_completed
+            .path_segments_mut()
+            .map_err(|_| AnswerError::ParsingURL)?
+            .extend(&["webhook", &id.to_string()]);
+
+        log::info!("{}", webhook_completed.as_str());
+
         let request = Request {
             version: stable_diffusion::MODEL_VERSION.to_string(),
             input,
-            webhook_completed: Some(format!("{}webhook/{}", &self.webhook_url, &id)),
+            webhook_completed: Some(webhook_completed.as_str().to_string()),
         };
 
         let response: Response = self.request(request, id.to_string()).await?;
@@ -89,10 +98,19 @@ impl ReplicateClient {
         type Request = api::Request<dalle_mini::Input>;
         type Response = api::Response<dalle_mini::Input, dalle_mini::Output>;
 
+        let mut webhook_completed = self.webhook_url.clone();
+
+        webhook_completed
+            .path_segments_mut()
+            .map_err(|_| AnswerError::ParsingURL)?
+            .extend(&["webhook", &id.to_string()]);
+
+        log::info!("{}", webhook_completed.as_str());
+
         let request = Request {
             version: dalle_mini::MODEL_VERSION.to_string(),
             input,
-            webhook_completed: Some(format!("{}webhook/{}", self.webhook_url, &id)),
+            webhook_completed: Some(webhook_completed.as_str().to_string()),
         };
 
         let response: Response = self.request(request, id.to_string()).await?;

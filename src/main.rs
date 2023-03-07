@@ -18,6 +18,8 @@ async fn main() -> Result<()> {
     let public_url = std::env::var("PUBLIC_URL")
         .expect("env variable PUBLIC_URL should be set to public address");
 
+    let public_url = url::Url::parse(&public_url).expect("PUBLIC_URL should be a valid url");
+
     let token = std::env::var("R8_TOKEN")
         .expect("en variable R8_TOKEN should be set to a valid replicate.com token");
 
