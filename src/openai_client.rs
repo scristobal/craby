@@ -1,11 +1,12 @@
 use std::error::Error;
 
 use async_openai::{
+    error::OpenAIError,
     types::{ChatCompletionRequestMessageArgs, CreateChatCompletionRequestArgs, Role},
     Client,
 };
 
-pub async fn reply(prompt: String) -> Result<Vec<String>, Box<dyn Error>> {
+pub async fn reply(prompt: String) -> Result<Vec<String>, OpenAIError> {
     let client = Client::new();
 
     let request = CreateChatCompletionRequestArgs::default()
@@ -14,7 +15,7 @@ pub async fn reply(prompt: String) -> Result<Vec<String>, Box<dyn Error>> {
         .messages([
             ChatCompletionRequestMessageArgs::default()
                 .role(Role::System)
-                .content("You are a helpful assistant.")
+                .content("You are a Telegram bot that answers trivia questions.")
                 .build()?,
             ChatCompletionRequestMessageArgs::default()
                 .role(Role::User)
