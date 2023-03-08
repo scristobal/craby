@@ -5,7 +5,7 @@ use reqwest::{
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{oneshot, Mutex};
 use uuid::Uuid;
-use warp::{hyper::body::Bytes, Filter};
+use warp::hyper::body::Bytes;
 
 use crate::{
     api::{self, dalle_mini, stable_diffusion},
@@ -14,30 +14,26 @@ use crate::{
 
 const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
 
-pub struct Connector {
+pub struct ReplicateClient {
     client: Client,
-    webhook_url: String,
-    results_channel_map: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>,
+    token: String,
+    webhook_url: Url,
+    tx_results: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>,
 }
 
-impl Connector {
-    pub fn new() -> Self {
-        let webhook = std::env::var("WEBHOOK_URL")
-            .expect("env variable WEBHOOK_URL should be set to public address");
-
+impl ReplicateClient {
+    pub fn new(
+        webhook_url: Url,
+        token: String,
+        tx_results: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>,
+    ) -> Self {
         let client = Client::new();
 
-        let results_channel_map =
-            Arc::new(Mutex::new(HashMap::<String, oneshot::Sender<Bytes>>::new()));
-
-        let tx_map_clone = Arc::clone(&results_channel_map);
-
-        tokio::spawn(async { start_webhook_server(tx_map_clone).await });
-
-        Connector {
+        ReplicateClient {
             client,
-            results_channel_map,
-            webhook_url: webhook,
+            token,
+            tx_results,
+            webhook_url,
         }
     }
 
@@ -54,10 +50,19 @@ impl Connector {
         type Request = api::Request<stable_diffusion::Input>;
         type Response = api::Response<stable_diffusion::Input, stable_diffusion::Output>;
 
+        let mut webhook_completed = self.webhook_url.clone();
+
+        webhook_completed
+            .path_segments_mut()
+            .map_err(|_| AnswerError::ParsingURL)?
+            .extend(&["webhook", &id.to_string()]);
+
+        log::info!("{}", webhook_completed.as_str());
+
         let request = Request {
             version: stable_diffusion::MODEL_VERSION.to_string(),
             input,
-            webhook_completed: Some(format!("{}webhook/{}", &self.webhook_url, &id)),
+            webhook_completed: Some(webhook_completed.as_str().to_string()),
         };
 
         let response: Response = self.request(request, id.to_string()).await?;
@@ -93,10 +98,19 @@ impl Connector {
         type Request = api::Request<dalle_mini::Input>;
         type Response = api::Response<dalle_mini::Input, dalle_mini::Output>;
 
+        let mut webhook_completed = self.webhook_url.clone();
+
+        webhook_completed
+            .path_segments_mut()
+            .map_err(|_| AnswerError::ParsingURL)?
+            .extend(&["webhook", &id.to_string()]);
+
+        log::info!("{}", webhook_completed.as_str());
+
         let request = Request {
             version: dalle_mini::MODEL_VERSION.to_string(),
             input,
-            webhook_completed: Some(format!("{}webhook/{}", self.webhook_url, &id)),
+            webhook_completed: Some(webhook_completed.as_str().to_string()),
         };
 
         let response: Response = self.request(request, id.to_string()).await?;
@@ -130,7 +144,7 @@ impl Connector {
         let (tx, rx) = oneshot::channel::<Bytes>();
 
         {
-            let tx_map = &mut self.results_channel_map.lock().await;
+            let tx_map = &mut self.tx_results.lock().await;
             tx_map.insert(id.clone(), tx);
         }
 
@@ -147,48 +161,12 @@ impl Connector {
     ) -> Result<reqwest::Response, reqwest::Error> {
         let body = serde_json::to_string(&request).unwrap();
 
-        let token = std::env::var("R8_TOKEN")
-            .expect("en variable R8_TOKEN should be set to a valid replicate.com token");
-
         self.client
             .post(MODEL_URL.to_string())
             .header(CONTENT_TYPE, "application/json")
-            .header(AUTHORIZATION, "Token ".to_string() + &token)
+            .header(AUTHORIZATION, "Token ".to_string() + &self.token)
             .body(body)
             .send()
             .await
     }
-}
-
-async fn start_webhook_server(
-    results_channel_map: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>,
-) {
-    let use_tx_map = warp::any().map(move || Arc::clone(&results_channel_map));
-
-    let process_entry =
-        |id: String, body: Bytes, tx_map: Arc<Mutex<HashMap<String, oneshot::Sender<Bytes>>>>| {
-            tokio::spawn(async move {
-                let tx_map = &mut tx_map.lock().await;
-                let tx = tx_map.remove(&id);
-
-                tx.and_then(|tx| tx.send(body).ok());
-            });
-
-            warp::http::StatusCode::OK
-        };
-
-    let webhooks = warp::post()
-        .and(warp::path!("webhook" / String))
-        .and(warp::body::content_length_limit(1024 * 16))
-        .and(warp::body::bytes())
-        .and(use_tx_map)
-        .map(process_entry);
-
-    let health = warp::get()
-        .and(warp::path!("health-check"))
-        .map(warp::reply);
-
-    let app = warp::any().and(webhooks.or(health));
-
-    warp::serve(app).run(([0, 0, 0, 0], 8080)).await;
 }

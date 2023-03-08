@@ -6,7 +6,7 @@ kill_timeout = 5
 processes = []
 
 [env]
-  WEBHOOK_URL = "https://cool-bird-8245.fly.dev/"
+  PUBLIC_URL = "https://cool-bird-8245.fly.dev/"
 
 [experimental]
   auto_rollback = true

@@ -1,4 +1,4 @@
-use crate::{api::stable_diffusion, connector, errors::AnswerError};
+use crate::{errors::AnswerError, replicate_client};
 use log;
 use std::sync::Arc;
 
@@ -20,7 +20,7 @@ pub async fn answer_cmd_repl(
     bot: teloxide::Bot,
     msg: Message,
     cmd: Command,
-    connector: Arc<connector::Connector>,
+    connector: Arc<replicate_client::ReplicateClient>,
 ) -> Result<(), RequestError> {
     log::info!("new job from {}", msg.chat.username().unwrap_or("unknown"));
 
@@ -35,6 +35,7 @@ pub async fn answer_cmd_repl(
             AnswerError::UrlParse(e) => Ok(log::error!("error parsing an url: {}", e)),
             AnswerError::ShouldNotBeNull(e) => Ok(log::error!("field should not be null: {}", e)),
             AnswerError::ConnectorError(e) => Ok(log::error!("connector error: {}", e)),
+            AnswerError::ParsingURL => Ok(log::error!("error parsing an url")),
         },
         Ok(url) => {
             bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))

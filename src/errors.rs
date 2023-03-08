@@ -11,6 +11,8 @@ pub enum AnswerError {
     ShouldNotBeNull(String),
     #[error("there was a problem processing the request")]
     ConnectorError(#[from] ConnectorError),
+    #[error("public url can't be parsed")]
+    ParsingURL,
 }
 
 #[derive(Error, Debug)]
