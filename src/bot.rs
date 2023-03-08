@@ -1,4 +1,5 @@
-use crate::{errors::AnswerError, replicate_client};
+use crate::{errors::AnswerError, openai_client::reply, replicate_client};
+use async_openai::error::OpenAIError;
 use log;
 use std::sync::Arc;
 
@@ -10,10 +11,8 @@ use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands, Reques
     description = "These commands are supported:"
 )]
 pub enum Command {
-    #[command(description = "Create an image from text using Stable Diffusion v1.4")]
-    StableD(String),
-    #[command(description = "Create an image from text using Dalle Mini")]
-    DalleM(String),
+    #[command()]
+    Ask(String),
 }
 
 pub async fn answer_cmd_repl(
@@ -24,24 +23,19 @@ pub async fn answer_cmd_repl(
 ) -> Result<(), RequestError> {
     log::info!("new job from {}", msg.chat.username().unwrap_or("unknown"));
 
-    let (result, prompt) = match cmd {
-        Command::StableD(prompt) => (connector.stable_diffusion(prompt.clone()).await, prompt),
-        Command::DalleM(prompt) => (connector.dalle_mini(prompt.clone()).await, prompt),
+    let results = match cmd {
+        Command::Ask(prompt) => reply(prompt).await,
     };
 
-    match result {
+    match results {
         Err(e) => match e {
-            AnswerError::BotRequest(e) => Err(e),
-            AnswerError::UrlParse(e) => Ok(log::error!("error parsing an url: {}", e)),
-            AnswerError::ShouldNotBeNull(e) => Ok(log::error!("field should not be null: {}", e)),
-            AnswerError::ConnectorError(e) => Ok(log::error!("connector error: {}", e)),
-            AnswerError::ParsingURL => Ok(log::error!("error parsing an url")),
+            OpenAIError => log::error!(""),
         },
-        Ok(url) => {
-            bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))
-                .caption(prompt)
-                .await?;
-            Ok(())
+        Ok(results) => {
+            for result in results {
+                bot.send_message(msg.chat.id, result).await?;
+            }
         }
-    }
+    };
+    Ok(())
 }
