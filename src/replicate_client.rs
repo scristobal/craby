@@ -4,16 +4,92 @@ use reqwest::{
 };
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{oneshot, Mutex};
+use tracing::info;
 use uuid::Uuid;
 use warp::hyper::body::Bytes;
 
-use crate::{
-    api::{self, dalle_mini, stable_diffusion},
-    errors::{AnswerError, ConnectorError},
-};
+use crate::errors::{AnswerError, ConnectorError};
 
 const MODEL_URL: &str = "https://api.replicate.com/v1/predictions";
 
+use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct Response<Input, Output> {
+    completed_at: Option<String>,
+    created_at: Option<String>,
+    pub error: Option<String>,
+    hardware: Option<String>,
+    id: String,
+    pub input: Input,
+    logs: String,
+    metrics: Metrics,
+    pub output: Output,
+    started_at: Option<String>,
+    status: String,
+    urls: Urls,
+    version: String,
+    webhook_completed: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+struct Metrics {
+    predict_time: f32,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+struct Urls {
+    get: String,
+    cancel: String,
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Debug)]
+pub struct Request<I> {
+    pub version: String,
+    pub input: I,
+    pub webhook_completed: Option<String>,
+}
+
+pub mod dalle_mini {
+    use serde::{Deserialize, Serialize};
+    use serde_with::skip_serializing_none;
+
+    pub const MODEL_VERSION: &str =
+        "f178fa7a1ae43a9a9af01b833b9d2ecf97b1bcb0acfd2dc5dd04895e042863f1";
+
+    #[skip_serializing_none]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct Input {
+        pub text: String,
+        pub seed: Option<u32>,
+        pub grid_size: Option<u32>,
+    }
+
+    pub type Output = Option<Vec<String>>;
+}
+
+pub mod stable_diffusion {
+    use serde::{Deserialize, Serialize};
+    use serde_with::skip_serializing_none;
+
+    pub const MODEL_VERSION: &str =
+        "328bd9692d29d6781034e3acab8cf3fcb122161e6f5afb896a4ca9fd57090577";
+
+    #[skip_serializing_none]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct Input {
+        pub prompt: String,
+        pub seed: Option<u32>,
+        pub num_inference_steps: Option<u32>,
+        pub guidance_scale: Option<f32>,
+    }
+
+    pub type Output = Option<Vec<String>>;
+}
+
+#[derive(Debug)]
 pub struct ReplicateClient {
     client: Client,
     token: String,
@@ -47,9 +123,6 @@ impl ReplicateClient {
 
         let id = Uuid::new_v4();
 
-        type Request = api::Request<stable_diffusion::Input>;
-        type Response = api::Response<stable_diffusion::Input, stable_diffusion::Output>;
-
         let mut webhook_completed = self.webhook_url.clone();
 
         webhook_completed
@@ -57,15 +130,18 @@ impl ReplicateClient {
             .map_err(|_| AnswerError::ParsingURL)?
             .extend(&["webhook", &id.to_string()]);
 
-        log::info!("{}", webhook_completed.as_str());
+        info!("{}", webhook_completed.as_str());
 
-        let request = Request {
+        type R = Request<stable_diffusion::Input>;
+
+        let request = R {
             version: stable_diffusion::MODEL_VERSION.to_string(),
             input,
             webhook_completed: Some(webhook_completed.as_str().to_string()),
         };
 
-        let response: Response = self.request(request, id.to_string()).await?;
+        let response: Response<stable_diffusion::Input, stable_diffusion::Output> =
+            self.request(request, id.to_string()).await?;
 
         if let Some(error) = response.error {
             return Err(AnswerError::ConnectorError(ConnectorError::ReplicateApi(
@@ -95,9 +171,6 @@ impl ReplicateClient {
 
         let id = Uuid::new_v4();
 
-        type Request = api::Request<dalle_mini::Input>;
-        type Response = api::Response<dalle_mini::Input, dalle_mini::Output>;
-
         let mut webhook_completed = self.webhook_url.clone();
 
         webhook_completed
@@ -105,15 +178,18 @@ impl ReplicateClient {
             .map_err(|_| AnswerError::ParsingURL)?
             .extend(&["webhook", &id.to_string()]);
 
-        log::info!("{}", webhook_completed.as_str());
+        info!("{}", webhook_completed.as_str());
 
-        let request = Request {
+        type R = Request<dalle_mini::Input>;
+
+        let request = R {
             version: dalle_mini::MODEL_VERSION.to_string(),
             input,
             webhook_completed: Some(webhook_completed.as_str().to_string()),
         };
 
-        let response: Response = self.request(request, id.to_string()).await?;
+        let response: Response<dalle_mini::Input, dalle_mini::Output> =
+            self.request(request, id.to_string()).await?;
 
         if let Some(error) = response.error {
             return Err(AnswerError::ConnectorError(ConnectorError::ReplicateApi(
