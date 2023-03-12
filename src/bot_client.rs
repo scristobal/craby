@@ -1,6 +1,6 @@
 use crate::{errors::AnswerError, replicate_client};
-use log;
 use std::sync::Arc;
+use tracing::{error, info, instrument};
 
 use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands, RequestError};
 
@@ -9,6 +9,7 @@ use teloxide::{prelude::*, types::InputFile, utils::command::BotCommands, Reques
     rename_rule = "lowercase",
     description = "These commands are supported:"
 )]
+#[derive(Debug)]
 pub enum Command {
     #[command(description = "Create an image from text using Stable Diffusion v1.4")]
     StableD(String),
@@ -16,13 +17,22 @@ pub enum Command {
     DalleM(String),
 }
 
+#[instrument]
 pub async fn answer_cmd_repl(
     bot: teloxide::Bot,
     msg: Message,
     cmd: Command,
     connector: Arc<replicate_client::ReplicateClient>,
 ) -> Result<(), RequestError> {
-    log::info!("new job from {}", msg.chat.username().unwrap_or("unknown"));
+    info!("new job from {}", msg.chat.username().unwrap_or("unknown"));
+
+    let url = bot.get_webhook_info().await.unwrap().url;
+
+    if let Some(url) = url {
+        info!("URL is {}", url);
+    } else {
+        info!("no URL")
+    }
 
     let (result, prompt) = match cmd {
         Command::StableD(prompt) => (connector.stable_diffusion(prompt.clone()).await, prompt),
@@ -32,10 +42,10 @@ pub async fn answer_cmd_repl(
     match result {
         Err(e) => match e {
             AnswerError::BotRequest(e) => Err(e),
-            AnswerError::UrlParse(e) => Ok(log::error!("error parsing an url: {}", e)),
-            AnswerError::ShouldNotBeNull(e) => Ok(log::error!("field should not be null: {}", e)),
-            AnswerError::ConnectorError(e) => Ok(log::error!("connector error: {}", e)),
-            AnswerError::ParsingURL => Ok(log::error!("error parsing an url")),
+            AnswerError::UrlParse(e) => Ok(error!("error parsing an url: {}", e)),
+            AnswerError::ShouldNotBeNull(e) => Ok(error!("field should not be null: {}", e)),
+            AnswerError::ConnectorError(e) => Ok(error!("connector error: {}", e)),
+            AnswerError::ParsingURL => Ok(error!("error parsing an url")),
         },
         Ok(url) => {
             bot.send_photo(msg.chat.id.to_string(), InputFile::url(url))
