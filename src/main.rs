@@ -1,6 +1,12 @@
-use craby::{app, replicate_client::ReplicateClient, webhook_server::WebhookServer};
+use craby::{
+    bot_client::{answer_cmd_repl, Command},
+    replicate_client::ReplicateClient,
+    webhook_server::WebhookServer,
+};
 use dotenv::dotenv;
 use std::io::Result;
+use teloxide::{types::Message, utils::command::BotCommands, Bot};
+use tracing::info;
 
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{oneshot, Mutex};
@@ -11,8 +17,8 @@ async fn main() -> Result<()> {
     pretty_env_logger::init();
 
     match dotenv() {
-        Ok(_) => log::info!("Loaded .env file"),
-        Err(_) => log::info!("No .env file found. Falling back to environment variables"),
+        Ok(_) => info!("Loaded .env file"),
+        Err(_) => info!("No .env file found. Falling back to environment variables"),
     }
 
     let public_url = std::env::var("PUBLIC_URL")
@@ -25,16 +31,31 @@ async fn main() -> Result<()> {
 
     let tx_results = Arc::new(Mutex::new(HashMap::<String, oneshot::Sender<Bytes>>::new()));
 
-    log::info!("Setting up webhook server...");
+    info!("Setting up webhook server...");
     let webhook_server = WebhookServer::new(tx_results.clone());
 
-    log::info!("Setting up API server...");
+    tokio::spawn(webhook_server.run(([0, 0, 0, 0], 8080)));
+
+    info!("Setting up API server...");
     let replicate_client = ReplicateClient::new(public_url, token, tx_results.clone());
 
-    log::info!("Starting bot...");
+    info!("Starting bot...");
     let bot = teloxide::Bot::from_env();
 
-    tokio::spawn(async { app::run(bot, replicate_client, webhook_server).await });
+    tokio::spawn(async move {
+        let replicate_client = Arc::new(replicate_client);
+
+        teloxide::commands_repl(
+            bot,
+            move |bot: Bot, msg: Message, cmd: Command| {
+                let replicate_client = Arc::clone(&replicate_client);
+
+                async move { answer_cmd_repl(bot, msg, cmd, replicate_client).await }
+            },
+            Command::ty(),
+        )
+        .await;
+    });
 
     tokio::signal::ctrl_c().await
 }
