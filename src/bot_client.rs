@@ -26,14 +26,6 @@ pub async fn answer_cmd_repl(
 ) -> Result<(), RequestError> {
     info!("new job from {}", msg.chat.username().unwrap_or("unknown"));
 
-    let url = bot.get_webhook_info().await.unwrap().url;
-
-    if let Some(url) = url {
-        info!("URL is {}", url);
-    } else {
-        info!("no URL")
-    }
-
     let (result, prompt) = match cmd {
         Command::StableD(prompt) => (connector.stable_diffusion(prompt.clone()).await, prompt),
         Command::DalleM(prompt) => (connector.dalle_mini(prompt.clone()).await, prompt),
