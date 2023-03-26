@@ -235,13 +235,11 @@ impl ReplicateClient {
         &self,
         request: &Request,
     ) -> Result<reqwest::Response, reqwest::Error> {
-        let body = serde_json::to_string(&request).unwrap();
-
         self.client
             .post(MODEL_URL.to_string())
             .header(CONTENT_TYPE, "application/json")
             .header(AUTHORIZATION, "Token ".to_string() + &self.token)
-            .body(body)
+            .json(request)
             .send()
             .await
     }
