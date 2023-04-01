@@ -157,7 +157,7 @@ impl ReplicateClient {
             "output image array was empty".to_string(),
         ))?;
 
-        let url = url::Url::parse(img)?;
+        let url = Url::parse(img)?;
 
         Ok(url)
     }
